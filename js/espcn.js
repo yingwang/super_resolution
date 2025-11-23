@@ -13,6 +13,10 @@ class ESPCNSuperResolution {
         this.isLoading = false;
         this.isReady = false;
         this.scale = 2; // Upscale factor
+        this.usePretrainedWeights = false; // Whether loaded from pre-trained model
+
+        // Path to pre-trained model (if available)
+        this.pretrainedModelPath = 'espcn_tfjs/model.json';
 
         // Processing canvases
         this.inputCanvas = null;
@@ -23,32 +27,69 @@ class ESPCNSuperResolution {
 
     /**
      * Initialize and build the ESPCN model
+     * First tries to load pre-trained weights, falls back to crafted weights
      */
     async init() {
         if (this.model || this.isLoading) return;
 
         this.isLoading = true;
-        console.log('Building ESPCN model...');
+        console.log('Initializing ESPCN model...');
 
         try {
             await tf.ready();
 
-            // Build the ESPCN model
-            this.model = this._buildModel();
+            // Try to load pre-trained model first
+            const pretrainedLoaded = await this._tryLoadPretrained();
 
-            // Initialize with pre-trained-like weights
-            await this._initializeWeights();
+            if (!pretrainedLoaded) {
+                console.log('No pre-trained weights found, using crafted weights...');
+                // Build model with crafted weights
+                this.model = this._buildModel();
+                await this._initializeWeights();
+            }
 
             this.isReady = true;
             this.isLoading = false;
-            console.log('ESPCN model ready');
+            console.log(`ESPCN model ready (pretrained: ${this.usePretrainedWeights})`);
 
             return true;
         } catch (error) {
-            console.error('Failed to build ESPCN model:', error);
+            console.error('Failed to initialize ESPCN model:', error);
             this.isLoading = false;
             throw error;
         }
+    }
+
+    /**
+     * Try to load pre-trained TF.js model
+     * @returns {boolean} Whether loading succeeded
+     */
+    async _tryLoadPretrained() {
+        try {
+            console.log(`Attempting to load pre-trained model from ${this.pretrainedModelPath}...`);
+
+            // Try to load the model
+            const loadedModel = await tf.loadLayersModel(this.pretrainedModelPath);
+
+            // Verify model structure
+            if (loadedModel.inputs[0].shape.length === 4) {
+                this.model = loadedModel;
+                this.usePretrainedWeights = true;
+                console.log('Pre-trained ESPCN model loaded successfully!');
+
+                // Warm up
+                const dummyInput = tf.zeros([1, 64, 64, 3]);
+                const dummyOutput = this.model.predict(dummyInput);
+                dummyOutput.dispose();
+                dummyInput.dispose();
+
+                return true;
+            }
+        } catch (error) {
+            console.log('Pre-trained model not available:', error.message);
+        }
+
+        return false;
     }
 
     /**
@@ -323,8 +364,16 @@ class ESPCNSuperResolution {
             // Run through ESPCN model
             const convOutput = this.model.predict(tensor);
 
-            // Apply pixel shuffle to get upscaled output
-            const upscaled = this._pixelShuffle(convOutput, this.scale);
+            // For pre-trained model, pixel shuffle is included
+            // For crafted weights model, we need to apply it manually
+            let upscaled;
+            if (this.usePretrainedWeights) {
+                // Pre-trained model output is already upscaled
+                upscaled = convOutput;
+            } else {
+                // Apply pixel shuffle to get upscaled output
+                upscaled = this._pixelShuffle(convOutput, this.scale);
+            }
 
             // Clip to valid range and convert back
             return upscaled.squeeze().clipByValue(0, 1).mul(255).toInt();
@@ -392,8 +441,14 @@ class ESPCNSuperResolution {
             // Run through model
             const convOutput = this.model.predict(downsampled);
 
-            // Pixel shuffle
-            const upscaled = this._pixelShuffle(convOutput, this.scale);
+            // For pre-trained model, pixel shuffle is included
+            // For crafted weights model, we need to apply it manually
+            let upscaled;
+            if (this.usePretrainedWeights) {
+                upscaled = convOutput;
+            } else {
+                upscaled = this._pixelShuffle(convOutput, this.scale);
+            }
 
             // Resize to match original
             const resized = tf.image.resizeBilinear(
@@ -424,7 +479,8 @@ class ESPCNSuperResolution {
             name: 'ESPCN',
             scale: this.scale,
             layers: this.model.layers.length,
-            params: this.model.countParams()
+            params: this.model.countParams(),
+            pretrained: this.usePretrainedWeights
         };
     }
 
