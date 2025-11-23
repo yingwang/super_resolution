@@ -22,8 +22,8 @@ class BackgroundSegmentation {
         // Offscreen canvases for processing
         this.segCanvas = null;
         this.segCtx = null;
-        this.outputCanvas = null;
-        this.outputCtx = null;
+        this.personCanvas = null;
+        this.personCtx = null;
     }
 
     /**
@@ -87,12 +87,17 @@ class BackgroundSegmentation {
             outputCanvas.height = height;
         }
 
-        // Create offscreen canvas if needed
+        // Create offscreen canvases if needed
         if (!this.segCanvas || this.segCanvas.width !== width) {
             this.segCanvas = document.createElement('canvas');
             this.segCanvas.width = width;
             this.segCanvas.height = height;
             this.segCtx = this.segCanvas.getContext('2d');
+
+            this.personCanvas = document.createElement('canvas');
+            this.personCanvas.width = width;
+            this.personCanvas.height = height;
+            this.personCtx = this.personCanvas.getContext('2d', { willReadFrequently: true });
         }
 
         const ctx = outputCanvas.getContext('2d');
@@ -141,19 +146,11 @@ class BackgroundSegmentation {
         this.segCtx.drawImage(source, 0, 0, width, height);
         this.segCtx.filter = 'none';
 
-        // Draw blurred image to output
+        // Draw blurred image to output as background
         ctx.drawImage(this.segCanvas, 0, 0);
 
-        // Create person mask
-        const mask = this._createMask(segmentation, width, height);
-
-        // Draw original video only where person is
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.putImageData(mask, 0, 0);
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.drawImage(source, 0, 0, width, height);
-        ctx.restore();
+        // Draw person (unblurred) on top
+        this._drawPersonWithMask(source, segmentation, ctx, width, height);
     }
 
     /**
@@ -199,11 +196,11 @@ class BackgroundSegmentation {
      * Draw person with segmentation mask
      */
     _drawPersonWithMask(source, segmentation, ctx, width, height) {
-        // Draw source to temp canvas
-        this.segCtx.drawImage(source, 0, 0, width, height);
+        // Draw source to person canvas
+        this.personCtx.drawImage(source, 0, 0, width, height);
 
         // Get image data
-        const imageData = this.segCtx.getImageData(0, 0, width, height);
+        const imageData = this.personCtx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
 
         // Apply mask - make non-person pixels transparent
@@ -219,7 +216,11 @@ class BackgroundSegmentation {
             this._applyEdgeSmoothing(pixels, segmentation.data, width, height);
         }
 
-        ctx.putImageData(imageData, 0, 0);
+        // Put the masked image data back to person canvas
+        this.personCtx.putImageData(imageData, 0, 0);
+
+        // Draw the person canvas onto the output (which already has the background)
+        ctx.drawImage(this.personCanvas, 0, 0);
     }
 
     /**
@@ -308,6 +309,8 @@ class BackgroundSegmentation {
         this.model = null;
         this.segCanvas = null;
         this.segCtx = null;
+        this.personCanvas = null;
+        this.personCtx = null;
         this.isEnabled = false;
     }
 }
