@@ -1,0 +1,22 @@
+{
+  "name": "webrtc-video-enhancement",
+  "version": "1.0.0",
+  "description": "POC Web app for WebRTC video streaming with local super-resolution/video enhancement",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve -p 3000",
+    "dev": "npx serve -p 3000 --cors"
+  },
+  "keywords": [
+    "webrtc",
+    "super-resolution",
+    "video-enhancement",
+    "tensorflow.js",
+    "mediapipe"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
