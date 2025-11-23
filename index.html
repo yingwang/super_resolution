@@ -96,7 +96,8 @@
                             <label for="enhancementMode">Mode:</label>
                             <select id="enhancementMode">
                                 <option value="sharpen" selected>Sharpen</option>
-                                <option value="superres">Super Resolution (2x)</option>
+                                <option value="superres">Super Resolution (Bicubic)</option>
+                                <option value="espcn">ESPCN Super Resolution (AI)</option>
                                 <option value="denoise">Denoise</option>
                                 <option value="enhance">Auto Enhance</option>
                                 <option value="hdr">HDR Effect</option>
@@ -237,6 +238,7 @@
 
     <!-- Application Scripts -->
     <script src="js/enhancer.js"></script>
+    <script src="js/espcn.js"></script>
     <script src="js/segmentation.js"></script>
     <script src="js/compression-loopback.js"></script>
     <script src="js/video-processor.js"></script>
