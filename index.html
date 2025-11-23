@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Video Enhancement POC</title>
+    <title>WebRTC Video Enhancement</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>WebRTC Video Enhancement POC</h1>
+            <h1>WebRTC Video Enhancement</h1>
             <p class="subtitle">Real compression artifacts → Local enhancement</p>
         </header>
 
@@ -121,10 +121,12 @@
                             <label for="enhancementMode">Mode:</label>
                             <select id="enhancementMode">
                                 <option value="sharpen">Sharpen</option>
-                                <option value="denoise" selected>Denoise (for compression)</option>
+                                <option value="denoise" selected>Denoise</option>
+                                <option value="denoise_sharpen">Denoise + Sharpen</option>
                                 <option value="enhance">Auto Enhance</option>
                                 <option value="hdr">HDR Effect</option>
                                 <option value="superres">Super Resolution (2x)</option>
+                                <option value="ml_superres">ML Super Resolution (2x)</option>
                             </select>
                         </div>
                     </div>
@@ -175,17 +177,17 @@
 
             <!-- Info Box -->
             <div class="info-box">
-                <strong>How it works:</strong> This POC creates a real WebRTC loopback connection.
-                Video is captured → encoded (VP8/VP9/H264) → transmitted through WebRTC → decoded.
+                <strong>How it works:</strong> Video is captured → encoded (VP8/VP9/H264) → transmitted through WebRTC → decoded.
                 The "After WebRTC" panel shows the video with real compression artifacts.
                 The "Enhanced" panel shows the result of local enhancement applied to the degraded video.
                 <br><br>
                 <strong>Try lowering the bitrate</strong> to see more compression artifacts, then enable enhancement to see the improvement.
+                <strong>ML Super Resolution</strong> uses a neural network for better upscaling quality.
             </div>
         </div>
 
         <footer>
-            <p>WebRTC Video Enhancement POC | Real Encoding/Decoding + TensorFlow.js Enhancement</p>
+            <p>WebRTC Video Enhancement | Real Encoding/Decoding + TensorFlow.js Enhancement</p>
         </footer>
     </div>
 

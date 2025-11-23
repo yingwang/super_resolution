@@ -551,7 +551,7 @@ class WebRTCEnhancementApp {
                 let outputHeight = inputHeight;
 
                 const mode = this.elements.enhancementMode.value;
-                if (this.elements.enableEnhancement.checked && mode === 'superres') {
+                if (this.elements.enableEnhancement.checked && (mode === 'superres' || mode === 'ml_superres')) {
                     outputWidth = Math.min(inputWidth * 2, 1920);
                     outputHeight = Math.min(inputHeight * 2, 1080);
                 }
