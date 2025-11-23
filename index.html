@@ -3,162 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Video Enhancement POC</title>
+    <title>Video Call Enhancement POC</title>
     <link rel="stylesheet" href="styles.css">
     <!-- TensorFlow.js for ML-based enhancement -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
-    <!-- MediaPipe for additional ML capabilities -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🎬 WebRTC Video Enhancement</h1>
-            <p class="subtitle">Real-time super-resolution and video enhancement in the browser</p>
+            <h1>Video Call Enhancement POC</h1>
+            <p class="subtitle">Receiver-side video enhancement for WebRTC video calls</p>
         </header>
 
         <div class="main-content">
-            <!-- Video Source Selection -->
-            <div class="control-panel">
-                <h3>Video Source</h3>
-                <div class="source-selection">
-                    <label>
-                        <input type="radio" name="source" value="sample" checked>
-                        Sample Video Stream
-                    </label>
-                    <label>
-                        <input type="radio" name="source" value="webcam">
-                        Webcam (WebRTC)
-                    </label>
-                    <label>
-                        <input type="radio" name="source" value="url">
-                        Custom URL
-                    </label>
+            <!-- Connection Status -->
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-dot" id="connectionDot"></span>
+                    <span id="connectionStatus">Disconnected</span>
                 </div>
-                <div class="url-input" id="urlInput" style="display: none;">
-                    <input type="text" id="videoUrl" placeholder="Enter video URL (MP4, WebM, HLS)">
-                    <button id="loadUrl">Load</button>
+                <div class="status-item">
+                    <span>Latency:</span>
+                    <span id="latency">--</span>
                 </div>
-                <div class="sample-videos" id="sampleVideos">
-                    <select id="sampleSelect">
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">Big Buck Bunny (720p)</option>
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4">Elephants Dream</option>
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4">Sintel</option>
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4">Tears of Steel</option>
-                    </select>
-                    <button id="loadSample">Load Sample</button>
+                <div class="status-item">
+                    <span>Enhancement:</span>
+                    <span id="enhancementStatus">Off</span>
                 </div>
             </div>
 
-            <!-- Enhancement Controls -->
-            <div class="control-panel">
-                <h3>Enhancement Settings</h3>
-                <div class="enhancement-controls">
-                    <div class="control-group">
-                        <label>
-                            <input type="checkbox" id="enableEnhancement" checked>
-                            Enable Enhancement
-                        </label>
+            <!-- Video Call Interface -->
+            <div class="video-call-container">
+                <!-- Remote Video (Receiver sees this - with enhancement) -->
+                <div class="video-panel main-video">
+                    <div class="video-label">Remote Video (Enhanced)</div>
+                    <div class="video-wrapper">
+                        <canvas id="enhancedVideo"></canvas>
+                        <div class="video-overlay" id="remoteOverlay">
+                            <span>Waiting for connection...</span>
+                        </div>
                     </div>
+                    <div class="video-info">
+                        <span id="remoteResolution">--</span>
+                        <span id="enhancementMode">--</span>
+                    </div>
+                </div>
 
-                    <div class="control-group">
-                        <label for="enhancementMode">Enhancement Mode:</label>
-                        <select id="enhancementMode">
+                <!-- Local Video (Sender's camera - small preview) -->
+                <div class="video-panel pip-video">
+                    <div class="video-label">You</div>
+                    <div class="video-wrapper">
+                        <video id="localVideo" muted playsinline autoplay></video>
+                    </div>
+                </div>
+
+                <!-- Original Remote (for comparison, hidden by default) -->
+                <div class="video-panel original-video" id="originalPanel" style="display: none;">
+                    <div class="video-label">Original (No Enhancement)</div>
+                    <div class="video-wrapper">
+                        <video id="remoteVideoOriginal" muted playsinline></video>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Call Controls -->
+            <div class="call-controls">
+                <button id="startCallBtn" class="call-btn start">
+                    <span class="icon">📞</span>
+                    Start Call
+                </button>
+                <button id="endCallBtn" class="call-btn end" disabled>
+                    <span class="icon">📵</span>
+                    End Call
+                </button>
+                <button id="toggleEnhanceBtn" class="control-btn active">
+                    <span class="icon">✨</span>
+                    Enhancement On
+                </button>
+                <button id="toggleCompareBtn" class="control-btn">
+                    <span class="icon">⚖️</span>
+                    Compare
+                </button>
+            </div>
+
+            <!-- Enhancement Settings -->
+            <div class="settings-panel">
+                <h3>Enhancement Settings</h3>
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label for="enhancementType">Mode:</label>
+                        <select id="enhancementType">
+                            <option value="auto">Auto Enhance</option>
                             <option value="sharpen">Sharpen</option>
-                            <option value="superres">Super Resolution (2x)</option>
-                            <option value="denoise">Denoise</option>
-                            <option value="enhance">Auto Enhance</option>
+                            <option value="denoise">Denoise (Low Light)</option>
+                            <option value="superres">Super Resolution</option>
                             <option value="hdr">HDR Effect</option>
                         </select>
                     </div>
 
-                    <div class="control-group">
-                        <label for="intensity">Intensity: <span id="intensityValue">50</span>%</label>
+                    <div class="setting-group">
+                        <label for="intensity">Intensity: <span id="intensityVal">50</span>%</label>
                         <input type="range" id="intensity" min="0" max="100" value="50">
                     </div>
 
-                    <div class="control-group">
-                        <label for="brightness">Brightness: <span id="brightnessValue">0</span></label>
-                        <input type="range" id="brightness" min="-100" max="100" value="0">
+                    <div class="setting-group">
+                        <label for="brightness">Brightness: <span id="brightnessVal">0</span></label>
+                        <input type="range" id="brightness" min="-50" max="50" value="0">
                     </div>
 
-                    <div class="control-group">
-                        <label for="contrast">Contrast: <span id="contrastValue">0</span></label>
-                        <input type="range" id="contrast" min="-100" max="100" value="0">
-                    </div>
-
-                    <div class="control-group">
-                        <label for="saturation">Saturation: <span id="saturationValue">0</span></label>
-                        <input type="range" id="saturation" min="-100" max="100" value="0">
+                    <div class="setting-group">
+                        <label for="contrast">Contrast: <span id="contrastVal">0</span></label>
+                        <input type="range" id="contrast" min="-50" max="50" value="0">
                     </div>
                 </div>
             </div>
 
-            <!-- Video Display -->
-            <div class="video-container">
-                <div class="video-panel">
-                    <h3>Original</h3>
-                    <div class="video-wrapper">
-                        <video id="originalVideo" muted playsinline></video>
-                        <div class="video-info" id="originalInfo">-</div>
+            <!-- Simulation Settings (for POC) -->
+            <div class="settings-panel simulation">
+                <h3>Simulation Settings (POC)</h3>
+                <p class="hint">Simulate different network conditions to test enhancement</p>
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label for="videoSource">Video Source:</label>
+                        <select id="videoSource">
+                            <option value="webcam">Your Webcam</option>
+                            <option value="sample1">Sample: Office Call</option>
+                            <option value="sample2">Sample: Low Light</option>
+                            <option value="sample3">Sample: Outdoor</option>
+                        </select>
                     </div>
-                </div>
-                <div class="video-panel enhanced">
-                    <h3>Enhanced</h3>
-                    <div class="video-wrapper">
-                        <canvas id="enhancedCanvas"></canvas>
-                        <div class="video-info" id="enhancedInfo">-</div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Playback Controls -->
-            <div class="playback-controls">
-                <button id="playPause" disabled>▶️ Play</button>
-                <button id="stop" disabled>⏹️ Stop</button>
-                <button id="fullscreen">🔲 Fullscreen</button>
-                <span class="time-display">
-                    <span id="currentTime">0:00</span> / <span id="duration">0:00</span>
-                </span>
-                <input type="range" id="seekBar" min="0" max="100" value="0" disabled>
-                <label>
-                    <input type="checkbox" id="showComparison">
-                    Split View
-                </label>
+                    <div class="setting-group">
+                        <label for="simulateQuality">Simulate Quality:</label>
+                        <select id="simulateQuality">
+                            <option value="good">Good (720p)</option>
+                            <option value="medium">Medium (480p)</option>
+                            <option value="poor">Poor (360p)</option>
+                            <option value="bad">Bad (240p)</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <!-- Performance Stats -->
             <div class="stats-panel">
-                <h3>Performance</h3>
-                <div class="stats-grid">
-                    <div class="stat">
-                        <span class="stat-label">FPS (Processing)</span>
-                        <span class="stat-value" id="fps">-</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Frame Time</span>
-                        <span class="stat-value" id="frameTime">-</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Resolution</span>
-                        <span class="stat-value" id="resolution">-</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Backend</span>
-                        <span class="stat-value" id="backend">-</span>
-                    </div>
+                <div class="stat">
+                    <span class="stat-label">Processing FPS</span>
+                    <span class="stat-value" id="fps">--</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Frame Time</span>
+                    <span class="stat-value" id="frameTime">--</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Input Resolution</span>
+                    <span class="stat-value" id="inputRes">--</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Output Resolution</span>
+                    <span class="stat-value" id="outputRes">--</span>
                 </div>
             </div>
         </div>
 
         <footer>
-            <p>WebRTC Video Enhancement POC | Using TensorFlow.js & MediaPipe</p>
+            <p>Receiver-Side Video Enhancement POC | WebRTC + TensorFlow.js</p>
         </footer>
     </div>
 
     <!-- Application Scripts -->
     <script src="js/enhancer.js"></script>
-    <script src="js/video-processor.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/video-call.js"></script>
 </body>
 </html>
