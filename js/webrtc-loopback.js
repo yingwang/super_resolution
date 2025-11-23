@@ -57,6 +57,8 @@ class WebRTCEnhancementApp {
         this.receiverPC = null;
         this.mediaStream = null;
         this.statsInterval = null;
+        this.lastBytesReceived = 0;
+        this.lastStatsTime = 0;
 
         // State
         this.isRunning = false;
@@ -73,7 +75,7 @@ class WebRTCEnhancementApp {
             frameTime: 0
         };
 
-        // Sample video URLs
+        // Sample video URLs (these support CORS)
         this.sampleVideos = {
             sample1: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
             sample2: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
@@ -95,7 +97,7 @@ class WebRTCEnhancementApp {
             this.elements.backend.textContent = backendInfo.tensorflow;
 
             this._updateEnhancementSettings();
-            this._showNotification('Ready! Click Start WebRTC to begin.', 'success');
+            this._showNotification('Ready! Select Webcam and click Start.', 'success');
         } catch (error) {
             console.error('Init error:', error);
             this._showNotification(`Init failed: ${error.message}`, 'error');
@@ -143,8 +145,15 @@ class WebRTCEnhancementApp {
             this._showNotification('Setting up WebRTC...', 'info');
             this._updateConnectionStatus('connecting');
 
-            // Get source video stream
-            await this._setupSourceStream();
+            const source = this.elements.videoSource.value;
+
+            if (source === 'webcam') {
+                // Use webcam directly
+                await this._setupWebcam();
+            } else {
+                // For sample videos, use canvas capture approach
+                await this._setupSampleVideo(source);
+            }
 
             // Create WebRTC loopback
             await this._createWebRTCLoopback();
@@ -163,91 +172,139 @@ class WebRTCEnhancementApp {
             this._startStatsMonitoring();
 
             this._updateConnectionStatus('connected');
-            this._showNotification('WebRTC connected! Video is being encoded and decoded.', 'success');
+            this._showNotification('WebRTC connected!', 'success');
 
         } catch (error) {
             console.error('Start error:', error);
             this._updateConnectionStatus('disconnected');
             this._showNotification(`Failed: ${error.message}`, 'error');
+            this.stop();
         }
     }
 
     /**
-     * Setup source video stream
+     * Setup webcam stream
      */
-    async _setupSourceStream() {
-        const source = this.elements.videoSource.value;
+    async _setupWebcam() {
+        console.log('Setting up webcam...');
 
-        if (source === 'webcam') {
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-                audio: false
-            });
-            this.elements.sourceVideo.srcObject = this.mediaStream;
-        } else {
-            // For sample videos, we need to capture from video element
-            const url = this.sampleVideos[source];
-            this.elements.sourceVideo.src = url;
-            this.elements.sourceVideo.crossOrigin = 'anonymous';
-            this.elements.sourceVideo.loop = true;
-
-            await new Promise((resolve, reject) => {
-                this.elements.sourceVideo.onloadeddata = resolve;
-                this.elements.sourceVideo.onerror = () => reject(new Error('Failed to load video'));
-                this.elements.sourceVideo.load();
-            });
-
-            await this.elements.sourceVideo.play();
-
-            // Capture stream from video element
-            this.mediaStream = this.elements.sourceVideo.captureStream();
-        }
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                frameRate: { ideal: 30 }
+            },
+            audio: false
+        });
 
         // Show source preview
-        if (!this.elements.sourceVideo.srcObject) {
-            this.elements.sourceVideo.srcObject = this.mediaStream;
-        }
-        await this.elements.sourceVideo.play().catch(() => {});
+        this.elements.sourceVideo.srcObject = this.mediaStream;
+        await this.elements.sourceVideo.play();
+
+        console.log('Webcam ready:', this.mediaStream.getVideoTracks()[0].getSettings());
+    }
+
+    /**
+     * Setup sample video with canvas capture
+     * Since captureStream() on cross-origin videos doesn't work,
+     * we draw to canvas and capture from there
+     */
+    async _setupSampleVideo(source) {
+        console.log('Setting up sample video...');
+
+        const url = this.sampleVideos[source];
+
+        // Create hidden video element
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.src = url;
+        video.loop = true;
+        video.muted = true;
+
+        await new Promise((resolve, reject) => {
+            video.onloadeddata = resolve;
+            video.onerror = () => reject(new Error('Failed to load video. Try using Webcam instead.'));
+            video.load();
+        });
+
+        await video.play();
+
+        // Create canvas to capture video frames
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Draw video to canvas continuously
+        const drawFrame = () => {
+            if (video.paused || video.ended) return;
+            ctx.drawImage(video, 0, 0);
+            requestAnimationFrame(drawFrame);
+        };
+        drawFrame();
+
+        // Capture stream from canvas
+        this.mediaStream = canvas.captureStream(30);
+
+        // Store video reference for cleanup
+        this._sampleVideo = video;
+        this._sampleCanvas = canvas;
+
+        // Show in source preview
+        this.elements.sourceVideo.srcObject = this.mediaStream;
+        await this.elements.sourceVideo.play();
+
+        console.log('Sample video ready:', video.videoWidth, 'x', video.videoHeight);
     }
 
     /**
      * Create WebRTC loopback connection
      */
     async _createWebRTCLoopback() {
-        // Create peer connections
-        this.senderPC = new RTCPeerConnection({
-            iceServers: [] // No ICE servers needed for loopback
-        });
+        console.log('Creating WebRTC loopback...');
 
-        this.receiverPC = new RTCPeerConnection({
-            iceServers: []
-        });
+        // Create peer connections
+        this.senderPC = new RTCPeerConnection();
+        this.receiverPC = new RTCPeerConnection();
 
         // Handle ICE candidates
         this.senderPC.onicecandidate = (e) => {
             if (e.candidate) {
-                this.receiverPC.addIceCandidate(e.candidate);
+                this.receiverPC.addIceCandidate(e.candidate).catch(console.error);
             }
         };
 
         this.receiverPC.onicecandidate = (e) => {
             if (e.candidate) {
-                this.senderPC.addIceCandidate(e.candidate);
+                this.senderPC.addIceCandidate(e.candidate).catch(console.error);
             }
         };
 
         // Handle incoming track on receiver
         this.receiverPC.ontrack = (e) => {
             console.log('Received track:', e.track.kind);
-            this.elements.receivedVideo.srcObject = e.streams[0];
+            if (e.streams && e.streams[0]) {
+                this.elements.receivedVideo.srcObject = e.streams[0];
+                this.elements.receivedVideo.play().catch(console.error);
+            }
+        };
+
+        // Connection state logging
+        this.senderPC.onconnectionstatechange = () => {
+            console.log('Sender connection state:', this.senderPC.connectionState);
+        };
+        this.receiverPC.onconnectionstatechange = () => {
+            console.log('Receiver connection state:', this.receiverPC.connectionState);
         };
 
         // Add tracks to sender
-        this.mediaStream.getTracks().forEach(track => {
+        const tracks = this.mediaStream.getTracks();
+        console.log('Adding tracks:', tracks.length);
+        tracks.forEach(track => {
             this.senderPC.addTrack(track, this.mediaStream);
         });
 
-        // Create offer with codec preferences
+        // Create offer
         const offer = await this.senderPC.createOffer();
 
         // Modify SDP to prefer selected codec
@@ -262,23 +319,44 @@ class WebRTCEnhancementApp {
         await this.receiverPC.setLocalDescription(answer);
         await this.senderPC.setRemoteDescription(answer);
 
-        // Set initial bitrate
+        // Wait for connection
+        await this._waitForConnection();
+
+        // Set bitrate
         await this._updateBitrate();
 
         // Update codec info
         this.elements.codecInfo.textContent = preferredCodec;
+
+        console.log('WebRTC loopback established');
+    }
+
+    /**
+     * Wait for WebRTC connection to establish
+     */
+    _waitForConnection() {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Connection timeout')), 10000);
+
+            const checkState = () => {
+                if (this.receiverPC.connectionState === 'connected') {
+                    clearTimeout(timeout);
+                    resolve();
+                } else if (this.receiverPC.connectionState === 'failed') {
+                    clearTimeout(timeout);
+                    reject(new Error('Connection failed'));
+                }
+            };
+
+            this.receiverPC.onconnectionstatechange = checkState;
+            checkState();
+        });
     }
 
     /**
      * Set preferred video codec in SDP
      */
     _setPreferredCodec(sdp, codec) {
-        const codecMap = {
-            'VP8': 'VP8',
-            'VP9': 'VP9',
-            'H264': 'H264'
-        };
-
         const lines = sdp.split('\r\n');
         let mLineIndex = -1;
         let codecPayload = null;
@@ -288,14 +366,16 @@ class WebRTCEnhancementApp {
             if (lines[i].startsWith('m=video')) {
                 mLineIndex = i;
             }
-            if (mLineIndex !== -1 && lines[i].includes(`a=rtpmap:`) && lines[i].toLowerCase().includes(codecMap[codec].toLowerCase())) {
-                codecPayload = lines[i].split(':')[1].split(' ')[0];
-                break;
+            if (mLineIndex !== -1 && lines[i].includes('a=rtpmap:')) {
+                const match = lines[i].match(/a=rtpmap:(\d+)\s+(\w+)/i);
+                if (match && match[2].toUpperCase() === codec.toUpperCase()) {
+                    codecPayload = match[1];
+                    break;
+                }
             }
         }
 
         if (mLineIndex !== -1 && codecPayload) {
-            // Reorder payload types in m-line to prefer our codec
             const mLineParts = lines[mLineIndex].split(' ');
             const payloads = mLineParts.slice(3);
             const newPayloads = [codecPayload, ...payloads.filter(p => p !== codecPayload)];
@@ -311,7 +391,7 @@ class WebRTCEnhancementApp {
     async _updateBitrate() {
         if (!this.senderPC) return;
 
-        const bitrate = parseInt(this.elements.targetBitrate.value) * 1000; // Convert to bps
+        const bitrate = parseInt(this.elements.targetBitrate.value) * 1000;
 
         const senders = this.senderPC.getSenders();
         for (const sender of senders) {
@@ -321,17 +401,23 @@ class WebRTCEnhancementApp {
                     params.encodings = [{}];
                 }
                 params.encodings[0].maxBitrate = bitrate;
-                await sender.setParameters(params);
+                try {
+                    await sender.setParameters(params);
+                    console.log('Bitrate set to:', bitrate / 1000, 'kbps');
+                } catch (e) {
+                    console.warn('Failed to set bitrate:', e);
+                }
             }
         }
-
-        console.log('Bitrate set to:', bitrate / 1000, 'kbps');
     }
 
     /**
      * Start WebRTC stats monitoring
      */
     _startStatsMonitoring() {
+        this.lastBytesReceived = 0;
+        this.lastStatsTime = performance.now();
+
         this.statsInterval = setInterval(async () => {
             if (!this.receiverPC) return;
 
@@ -349,11 +435,20 @@ class WebRTCEnhancementApp {
                     }
                 });
 
-                // Calculate bitrate (approximate)
-                const bitrateKbps = Math.round((bytesReceived * 8) / 1000 / (performance.now() / 1000));
-                this.elements.bitrateInfo.textContent = `~${bitrateKbps} kbps`;
+                // Calculate actual bitrate
+                const now = performance.now();
+                const timeDiff = (now - this.lastStatsTime) / 1000;
+                const bytesDiff = bytesReceived - this.lastBytesReceived;
+                const bitrateKbps = Math.round((bytesDiff * 8) / timeDiff / 1000);
 
-                // Packet loss percentage
+                this.lastBytesReceived = bytesReceived;
+                this.lastStatsTime = now;
+
+                if (bitrateKbps > 0) {
+                    this.elements.bitrateInfo.textContent = `${bitrateKbps} kbps`;
+                }
+
+                // Packet loss
                 const totalPackets = packetsReceived + packetsLost;
                 const lossPercent = totalPackets > 0 ? ((packetsLost / totalPackets) * 100).toFixed(1) : 0;
                 this.elements.packetLoss.textContent = `${lossPercent}%`;
@@ -370,13 +465,11 @@ class WebRTCEnhancementApp {
     stop() {
         this._stopProcessing();
 
-        // Stop stats monitoring
         if (this.statsInterval) {
             clearInterval(this.statsInterval);
             this.statsInterval = null;
         }
 
-        // Close peer connections
         if (this.senderPC) {
             this.senderPC.close();
             this.senderPC = null;
@@ -386,22 +479,27 @@ class WebRTCEnhancementApp {
             this.receiverPC = null;
         }
 
-        // Stop media stream
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach(track => track.stop());
             this.mediaStream = null;
         }
 
-        // Reset videos
+        // Cleanup sample video elements
+        if (this._sampleVideo) {
+            this._sampleVideo.pause();
+            this._sampleVideo.src = '';
+            this._sampleVideo = null;
+        }
+        if (this._sampleCanvas) {
+            this._sampleCanvas = null;
+        }
+
         this.elements.sourceVideo.srcObject = null;
-        this.elements.sourceVideo.src = '';
         this.elements.receivedVideo.srcObject = null;
 
-        // Clear canvas
         const ctx = this.elements.enhancedCanvas.getContext('2d');
         ctx.clearRect(0, 0, this.elements.enhancedCanvas.width, this.elements.enhancedCanvas.height);
 
-        // Update UI
         this.isRunning = false;
         this.elements.startBtn.disabled = false;
         this.elements.stopBtn.disabled = true;
@@ -411,7 +509,7 @@ class WebRTCEnhancementApp {
         this._updateConnectionStatus('disconnected');
         this._resetStats();
 
-        this._showNotification('WebRTC stopped', 'info');
+        this._showNotification('Stopped', 'info');
     }
 
     /**
@@ -460,7 +558,6 @@ class WebRTCEnhancementApp {
 
                 await this.enhancer.processFrame(video, outputWidth, outputHeight);
 
-                // Update resolution displays
                 this.elements.originalRes.textContent = `${inputWidth}x${inputHeight}`;
                 this.elements.enhancedRes.textContent = `${outputWidth}x${outputHeight}`;
                 this.elements.inputRes.textContent = `${inputWidth}x${inputHeight}`;
@@ -470,7 +567,6 @@ class WebRTCEnhancementApp {
             console.error('Frame error:', error);
         }
 
-        // Stats
         const frameTime = performance.now() - startTime;
         this.stats.frameCount++;
 
