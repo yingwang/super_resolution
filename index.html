@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="styles.css">
     <!-- TensorFlow.js for ML-based enhancement -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
+    <!-- BodyPix for background segmentation -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0"></script>
 </head>
 <body>
     <div class="container">
@@ -119,6 +121,47 @@
                 </div>
             </div>
 
+            <!-- Background Segmentation Settings -->
+            <div class="control-panel segmentation-settings">
+                <h3>Background Segmentation (BodyPix)</h3>
+                <div class="settings-grid">
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="enableSegmentation">
+                            Enable Background Segmentation
+                        </label>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="backgroundType">Background:</label>
+                        <select id="backgroundType">
+                            <option value="blur" selected>Blur</option>
+                            <option value="color">Solid Color</option>
+                            <option value="transparent">Transparent</option>
+                            <option value="image">Virtual Background</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group" id="blurAmountGroup">
+                        <label for="blurAmount">Blur Amount: <span id="blurAmountValue">10</span>px</label>
+                        <input type="range" id="blurAmount" min="1" max="30" value="10">
+                    </div>
+
+                    <div class="control-group" id="bgColorGroup" style="display:none;">
+                        <label for="bgColor">Background Color:</label>
+                        <input type="color" id="bgColor" value="#00ff00">
+                    </div>
+
+                    <div class="control-group full-width" id="bgImageGroup" style="display:none;">
+                        <label for="bgImageUrl">Background Image URL:</label>
+                        <div class="url-input">
+                            <input type="text" id="bgImageUrl" placeholder="Enter image URL">
+                            <button id="loadBgImage">Load</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Video Display - Three Column Comparison -->
             <div class="video-container three-column">
                 <div class="video-panel original-panel">
@@ -194,6 +237,7 @@
 
     <!-- Application Scripts -->
     <script src="js/enhancer.js"></script>
+    <script src="js/segmentation.js"></script>
     <script src="js/compression-loopback.js"></script>
     <script src="js/video-processor.js"></script>
     <script src="js/app.js"></script>
