@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Compression Comparison</title>
+    <title>Video Compression & Enhancement Comparison</title>
     <link rel="stylesheet" href="styles.css">
     <!-- TensorFlow.js for ML-based enhancement -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
@@ -11,8 +11,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>Video Compression Comparison</h1>
-            <p class="subtitle">Real WebRTC encoding/decoding - Compare original vs compressed video</p>
+            <h1>Video Compression & Enhancement</h1>
+            <p class="subtitle">Compare: Original vs Compressed (Received) vs Enhanced</p>
         </header>
 
         <div class="main-content">
@@ -52,60 +52,94 @@
                 </div>
             </div>
 
-            <!-- Compression Settings -->
-            <div class="control-panel compression-settings">
-                <h3>Compression Settings (WebRTC Encoding)</h3>
-                <div class="compression-controls">
-                    <div class="control-group">
-                        <label>
-                            <input type="checkbox" id="enableCompression" checked>
-                            Enable Compression Comparison
-                        </label>
-                    </div>
+            <!-- Two-column settings -->
+            <div class="settings-row">
+                <!-- Compression Settings -->
+                <div class="control-panel compression-settings">
+                    <h3>Compression (WebRTC Encoding)</h3>
+                    <div class="settings-grid">
+                        <div class="control-group">
+                            <label for="codecSelect">Codec:</label>
+                            <select id="codecSelect">
+                                <option value="VP8">VP8</option>
+                                <option value="VP9" selected>VP9</option>
+                                <option value="H264">H.264</option>
+                            </select>
+                        </div>
 
-                    <div class="control-group">
-                        <label for="codecSelect">Codec:</label>
-                        <select id="codecSelect">
-                            <option value="VP8">VP8</option>
-                            <option value="VP9" selected>VP9</option>
-                            <option value="H264">H.264</option>
-                        </select>
-                    </div>
+                        <div class="control-group">
+                            <label for="bitrateSelect">Bitrate:</label>
+                            <select id="bitrateSelect">
+                                <option value="100">100 kbps (Very Low)</option>
+                                <option value="250">250 kbps (Low)</option>
+                                <option value="500">500 kbps (Medium-Low)</option>
+                                <option value="1000" selected>1000 kbps (Medium)</option>
+                                <option value="2000">2000 kbps (High)</option>
+                                <option value="4000">4000 kbps (Very High)</option>
+                            </select>
+                        </div>
 
-                    <div class="control-group">
-                        <label for="bitrateSelect">Bitrate:</label>
-                        <select id="bitrateSelect">
-                            <option value="100">100 kbps (Very Low)</option>
-                            <option value="250">250 kbps (Low)</option>
-                            <option value="500">500 kbps (Medium-Low)</option>
-                            <option value="1000" selected>1000 kbps (Medium)</option>
-                            <option value="2000">2000 kbps (High)</option>
-                            <option value="4000">4000 kbps (Very High)</option>
-                            <option value="8000">8000 kbps (Ultra)</option>
-                        </select>
+                        <div class="control-group full-width">
+                            <label for="bitrateSlider">Fine Tune: <span id="bitrateValue">1000</span> kbps</label>
+                            <input type="range" id="bitrateSlider" min="50" max="8000" value="1000" step="50">
+                        </div>
                     </div>
+                </div>
 
-                    <div class="control-group">
-                        <label for="bitrateSlider">Fine Tune: <span id="bitrateValue">1000</span> kbps</label>
-                        <input type="range" id="bitrateSlider" min="50" max="10000" value="1000" step="50">
+                <!-- Enhancement Settings -->
+                <div class="control-panel enhancement-settings">
+                    <h3>Enhancement (Receiver Side)</h3>
+                    <div class="settings-grid">
+                        <div class="control-group">
+                            <label for="enhancementMode">Mode:</label>
+                            <select id="enhancementMode">
+                                <option value="sharpen" selected>Sharpen</option>
+                                <option value="superres">Super Resolution (2x)</option>
+                                <option value="denoise">Denoise</option>
+                                <option value="enhance">Auto Enhance</option>
+                                <option value="hdr">HDR Effect</option>
+                            </select>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="intensity">Intensity: <span id="intensityValue">50</span>%</label>
+                            <input type="range" id="intensity" min="0" max="100" value="50">
+                        </div>
+
+                        <div class="control-group">
+                            <label for="brightness">Brightness: <span id="brightnessValue">0</span></label>
+                            <input type="range" id="brightness" min="-100" max="100" value="0">
+                        </div>
+
+                        <div class="control-group">
+                            <label for="contrast">Contrast: <span id="contrastValue">0</span></label>
+                            <input type="range" id="contrast" min="-100" max="100" value="0">
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Video Display - Side by Side -->
-            <div class="video-container comparison-mode">
+            <!-- Video Display - Three Column Comparison -->
+            <div class="video-container three-column">
                 <div class="video-panel original-panel">
-                    <h3>Original (Uncompressed)</h3>
+                    <h3>Original (Source)</h3>
                     <div class="video-wrapper">
                         <video id="originalVideo" muted playsinline></video>
                         <div class="video-info" id="originalInfo">-</div>
                     </div>
                 </div>
-                <div class="video-panel compressed-panel">
-                    <h3>Compressed (WebRTC Encoded)</h3>
+                <div class="video-panel received-panel">
+                    <h3>Received (Compressed)</h3>
                     <div class="video-wrapper">
-                        <video id="compressedVideo" muted playsinline autoplay></video>
-                        <div class="video-info" id="compressedInfo">-</div>
+                        <video id="receivedVideo" muted playsinline autoplay></video>
+                        <div class="video-info" id="receivedInfo">-</div>
+                    </div>
+                </div>
+                <div class="video-panel enhanced-panel">
+                    <h3>Enhanced (Receiver Side)</h3>
+                    <div class="video-wrapper">
+                        <canvas id="enhancedCanvas"></canvas>
+                        <div class="video-info" id="enhancedInfo">-</div>
                     </div>
                 </div>
             </div>
@@ -123,7 +157,7 @@
 
             <!-- Compression Stats -->
             <div class="stats-panel compression-stats">
-                <h3>Compression Statistics</h3>
+                <h3>Statistics</h3>
                 <div class="stats-grid">
                     <div class="stat">
                         <span class="stat-label">Codec</span>
@@ -142,37 +176,19 @@
                         <span class="stat-value" id="statResolution">-</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-label">FPS</span>
+                        <span class="stat-label">Enhancement</span>
+                        <span class="stat-value" id="statEnhancement">-</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Processing FPS</span>
                         <span class="stat-value" id="statFps">-</span>
                     </div>
-                    <div class="stat">
-                        <span class="stat-label">Packets Lost</span>
-                        <span class="stat-value" id="statPacketsLost">-</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Data Sent</span>
-                        <span class="stat-value" id="statBytesSent">-</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Frames Dropped</span>
-                        <span class="stat-value" id="statFramesDropped">-</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Quality Analysis -->
-            <div class="control-panel quality-analysis">
-                <h3>Quality Notes</h3>
-                <div class="quality-info">
-                    <p><strong>What you're seeing:</strong> The left video is the raw source. The right video has gone through WebRTC's real VP8/VP9/H.264 encoder and decoder - the same compression used in video calls.</p>
-                    <p><strong>Lower bitrates</strong> = more compression artifacts (blockiness, blur, color banding)</p>
-                    <p><strong>Try:</strong> Set bitrate to 100-250 kbps to see obvious compression artifacts, especially during motion.</p>
                 </div>
             </div>
         </div>
 
         <footer>
-            <p>Video Compression Comparison | Real WebRTC Encoding/Decoding</p>
+            <p>Video Compression & Enhancement Comparison | WebRTC + TensorFlow.js</p>
         </footer>
     </div>
 
