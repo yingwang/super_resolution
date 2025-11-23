@@ -328,6 +328,29 @@ header h1 {
     color: var(--success-color);
 }
 
+/* Source Preview */
+.source-preview {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 15px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+}
+
+.source-preview .preview-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.source-preview video {
+    height: 80px;
+    border-radius: 4px;
+    background: #000;
+}
+
 /* Info Box */
 .info-box {
     padding: 12px 15px;
