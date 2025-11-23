@@ -399,6 +399,8 @@ def create_pretrained_weights():
 
 def main():
     """Main entry point."""
+    global EPOCHS
+
     import argparse
     parser = argparse.ArgumentParser(description='Train ESPCN model for super resolution')
     parser.add_argument('--pretrained-only', action='store_true',
@@ -407,7 +409,6 @@ def main():
                         help=f'Number of training epochs (default: {EPOCHS})')
     args = parser.parse_args()
 
-    global EPOCHS
     EPOCHS = args.epochs
 
     if args.pretrained_only:
