@@ -67,7 +67,15 @@ class App {
             bgColorGroup: document.getElementById('bgColorGroup'),
             bgImageUrl: document.getElementById('bgImageUrl'),
             bgImageGroup: document.getElementById('bgImageGroup'),
-            loadBgImage: document.getElementById('loadBgImage')
+            loadBgImage: document.getElementById('loadBgImage'),
+
+            // Panel visibility controls
+            showOriginal: document.getElementById('showOriginal'),
+            showReceived: document.getElementById('showReceived'),
+            showEnhanced: document.getElementById('showEnhanced'),
+            originalPanel: document.getElementById('originalPanel'),
+            receivedPanel: document.getElementById('receivedPanel'),
+            enhancedPanel: document.getElementById('enhancedPanel')
         };
 
         // Modules
@@ -184,6 +192,11 @@ class App {
         });
         this.elements.bgColor.addEventListener('input', () => this._updateSegmentationSettings());
         this.elements.loadBgImage.addEventListener('click', () => this._loadBackgroundImage());
+
+        // Panel visibility controls
+        this.elements.showOriginal.addEventListener('change', () => this._updatePanelVisibility());
+        this.elements.showReceived.addEventListener('change', () => this._updatePanelVisibility());
+        this.elements.showEnhanced.addEventListener('change', () => this._updatePanelVisibility());
 
         // Playback controls
         this.elements.playPauseBtn.addEventListener('click', () => this._togglePlayPause());
@@ -746,6 +759,19 @@ class App {
         } catch (error) {
             this._showNotification('Failed to load background image', 'error');
         }
+    }
+
+    /**
+     * Update panel visibility based on checkboxes
+     */
+    _updatePanelVisibility() {
+        const showOriginal = this.elements.showOriginal.checked;
+        const showReceived = this.elements.showReceived.checked;
+        const showEnhanced = this.elements.showEnhanced.checked;
+
+        this.elements.originalPanel.classList.toggle('hidden', !showOriginal);
+        this.elements.receivedPanel.classList.toggle('hidden', !showReceived);
+        this.elements.enhancedPanel.classList.toggle('hidden', !showEnhanced);
     }
 
     /**

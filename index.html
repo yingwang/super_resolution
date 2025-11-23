@@ -163,23 +163,40 @@
                 </div>
             </div>
 
+            <!-- Video Display Controls -->
+            <div class="video-display-controls">
+                <span class="control-label">Show:</span>
+                <label class="panel-toggle">
+                    <input type="checkbox" id="showOriginal" checked>
+                    <span class="toggle-label original">Original</span>
+                </label>
+                <label class="panel-toggle">
+                    <input type="checkbox" id="showReceived" checked>
+                    <span class="toggle-label received">Received</span>
+                </label>
+                <label class="panel-toggle">
+                    <input type="checkbox" id="showEnhanced" checked>
+                    <span class="toggle-label enhanced">Enhanced</span>
+                </label>
+            </div>
+
             <!-- Video Display - Three Column Comparison -->
             <div class="video-container three-column">
-                <div class="video-panel original-panel">
+                <div class="video-panel original-panel" id="originalPanel">
                     <h3>Original (Source)</h3>
                     <div class="video-wrapper">
                         <video id="originalVideo" muted playsinline></video>
                         <div class="video-info" id="originalInfo">-</div>
                     </div>
                 </div>
-                <div class="video-panel received-panel">
+                <div class="video-panel received-panel" id="receivedPanel">
                     <h3>Received (Compressed)</h3>
                     <div class="video-wrapper">
                         <video id="receivedVideo" muted playsinline autoplay></video>
                         <div class="video-info" id="receivedInfo">-</div>
                     </div>
                 </div>
-                <div class="video-panel enhanced-panel">
+                <div class="video-panel enhanced-panel" id="enhancedPanel">
                     <h3>Enhanced (Receiver Side)</h3>
                     <div class="video-wrapper">
                         <canvas id="enhancedCanvas"></canvas>
