@@ -74,6 +74,7 @@ class App {
         this.compressionLoopback = new CompressionLoopback();
         this.enhancer = new VideoEnhancer();
         this.segmentation = new BackgroundSegmentation();
+        this.espcn = new ESPCNSuperResolution();
 
         // State
         this.currentSource = 'sample';
@@ -495,8 +496,18 @@ class App {
                         }
                     }
 
-                    // Process frame through enhancer
-                    await this.enhancer.processFrame(sourceForEnhancer, outputWidth, outputHeight);
+                    // Process frame - use ESPCN or regular enhancer
+                    const mode = this.elements.enhancementMode.value;
+                    if (mode === 'espcn' && this.espcn.isReady) {
+                        const intensity = this.elements.intensity.value / 100;
+                        await this.espcn.processFrameHybrid(
+                            sourceForEnhancer,
+                            this.elements.enhancedCanvas,
+                            intensity
+                        );
+                    } else {
+                        await this.enhancer.processFrame(sourceForEnhancer, outputWidth, outputHeight);
+                    }
 
                     // Update FPS stats
                     this.stats.frameCount++;
@@ -650,11 +661,25 @@ class App {
     /**
      * Update enhancement settings
      */
-    _updateEnhancementSettings() {
+    async _updateEnhancementSettings() {
         const mode = this.elements.enhancementMode.value;
         const intensity = this.elements.intensity.value / 100;
         const brightness = this.elements.brightness.value / 100;
         const contrast = this.elements.contrast.value / 100;
+
+        // Initialize ESPCN if selected and not ready
+        if (mode === 'espcn' && !this.espcn.isReady) {
+            this._showNotification('Loading ESPCN model...', 'info');
+            try {
+                await this.espcn.init();
+                const info = this.espcn.getModelInfo();
+                this._showNotification(`ESPCN ready! (${info.params} params)`, 'success');
+            } catch (error) {
+                this._showNotification('Failed to load ESPCN model', 'error');
+                this.elements.enhancementMode.value = 'sharpen';
+                return;
+            }
+        }
 
         this.enhancer.updateSettings({
             mode,
