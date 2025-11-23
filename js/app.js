@@ -1,6 +1,6 @@
 /**
- * Main Application Logic
- * Ties together the video processor and enhancer modules
+ * Video Compression Comparison App
+ * Compares original video with WebRTC-compressed video side by side
  */
 
 class App {
@@ -9,7 +9,7 @@ class App {
         this.elements = {
             // Video elements
             originalVideo: document.getElementById('originalVideo'),
-            enhancedCanvas: document.getElementById('enhancedCanvas'),
+            compressedVideo: document.getElementById('compressedVideo'),
 
             // Source controls
             sourceRadios: document.querySelectorAll('input[name="source"]'),
@@ -20,17 +20,12 @@ class App {
             sampleSelect: document.getElementById('sampleSelect'),
             loadSampleBtn: document.getElementById('loadSample'),
 
-            // Enhancement controls
-            enableEnhancement: document.getElementById('enableEnhancement'),
-            enhancementMode: document.getElementById('enhancementMode'),
-            intensity: document.getElementById('intensity'),
-            intensityValue: document.getElementById('intensityValue'),
-            brightness: document.getElementById('brightness'),
-            brightnessValue: document.getElementById('brightnessValue'),
-            contrast: document.getElementById('contrast'),
-            contrastValue: document.getElementById('contrastValue'),
-            saturation: document.getElementById('saturation'),
-            saturationValue: document.getElementById('saturationValue'),
+            // Compression controls
+            enableCompression: document.getElementById('enableCompression'),
+            codecSelect: document.getElementById('codecSelect'),
+            bitrateSelect: document.getElementById('bitrateSelect'),
+            bitrateSlider: document.getElementById('bitrateSlider'),
+            bitrateValue: document.getElementById('bitrateValue'),
 
             // Playback controls
             playPauseBtn: document.getElementById('playPause'),
@@ -39,26 +34,30 @@ class App {
             currentTime: document.getElementById('currentTime'),
             duration: document.getElementById('duration'),
             seekBar: document.getElementById('seekBar'),
-            showComparison: document.getElementById('showComparison'),
 
             // Info displays
             originalInfo: document.getElementById('originalInfo'),
-            enhancedInfo: document.getElementById('enhancedInfo'),
+            compressedInfo: document.getElementById('compressedInfo'),
 
             // Stats
-            fpsDisplay: document.getElementById('fps'),
-            frameTimeDisplay: document.getElementById('frameTime'),
-            resolutionDisplay: document.getElementById('resolution'),
-            backendDisplay: document.getElementById('backend')
+            statCodec: document.getElementById('statCodec'),
+            statTargetBitrate: document.getElementById('statTargetBitrate'),
+            statActualBitrate: document.getElementById('statActualBitrate'),
+            statResolution: document.getElementById('statResolution'),
+            statFps: document.getElementById('statFps'),
+            statPacketsLost: document.getElementById('statPacketsLost'),
+            statBytesSent: document.getElementById('statBytesSent'),
+            statFramesDropped: document.getElementById('statFramesDropped')
         };
 
         // Modules
-        this.enhancer = new VideoEnhancer();
-        this.processor = new VideoProcessor();
+        this.compressionLoopback = new CompressionLoopback();
 
         // State
         this.currentSource = 'sample';
         this.videoLoaded = false;
+        this.mediaStream = null;
+        this.canvasStream = null;
 
         // Bind methods
         this._bindEvents();
@@ -69,32 +68,23 @@ class App {
      */
     async init() {
         try {
-            // Show loading state
             this._showNotification('Initializing...', 'info');
 
-            // Initialize enhancer
-            const backend = await this.enhancer.init(this.elements.enhancedCanvas);
-            console.log('Enhancer initialized with backend:', backend);
+            // Set up compression loopback callbacks
+            this.compressionLoopback.onStats = (stats) => this._updateCompressionStats(stats);
+            this.compressionLoopback.onCompressedStream = (stream) => {
+                this.elements.compressedVideo.srcObject = stream;
+            };
 
-            // Initialize processor
-            await this.processor.init(
-                this.elements.originalVideo,
-                this.elements.enhancedCanvas,
-                this.enhancer
-            );
-
-            // Set up stats callback
-            this.processor.onStats = (stats) => this._updateStats(stats);
-            this.processor.onError = (error) => this._showNotification(error.message, 'error');
-
-            // Update backend display
-            const backendInfo = this.enhancer.getBackendInfo();
-            this.elements.backendDisplay.textContent = `${backendInfo.enhancer} / ${backendInfo.tensorflow}`;
+            // Configure video elements
+            this.elements.originalVideo.setAttribute('playsinline', '');
+            this.elements.originalVideo.setAttribute('muted', '');
+            this.elements.originalVideo.muted = true;
 
             // Load default sample video
             await this._loadSampleVideo();
 
-            this._showNotification('Ready! Click Play to start.', 'success');
+            this._showNotification('Ready! Click Play to start comparison.', 'success');
 
         } catch (error) {
             console.error('Initialization error:', error);
@@ -120,17 +110,26 @@ class App {
         // Sample video loading
         this.elements.loadSampleBtn.addEventListener('click', () => this._loadSampleVideo());
 
-        // Enhancement controls
-        this.elements.enableEnhancement.addEventListener('change', () => this._updateEnhancementSettings());
-        this.elements.enhancementMode.addEventListener('change', () => this._updateEnhancementSettings());
+        // Compression controls
+        this.elements.enableCompression.addEventListener('change', () => this._updateCompressionSettings());
+        this.elements.codecSelect.addEventListener('change', () => this._updateCompressionSettings());
 
-        // Slider controls
-        const sliders = ['intensity', 'brightness', 'contrast', 'saturation'];
-        sliders.forEach(name => {
-            this.elements[name].addEventListener('input', (e) => {
-                this.elements[`${name}Value`].textContent = e.target.value;
-                this._updateEnhancementSettings();
+        // Bitrate controls
+        this.elements.bitrateSelect.addEventListener('change', (e) => {
+            this.elements.bitrateSlider.value = e.target.value;
+            this.elements.bitrateValue.textContent = e.target.value;
+            this._updateCompressionSettings();
+        });
+
+        this.elements.bitrateSlider.addEventListener('input', (e) => {
+            this.elements.bitrateValue.textContent = e.target.value;
+            // Update dropdown to closest value
+            const options = Array.from(this.elements.bitrateSelect.options);
+            const closest = options.reduce((prev, curr) => {
+                return Math.abs(curr.value - e.target.value) < Math.abs(prev.value - e.target.value) ? curr : prev;
             });
+            this.elements.bitrateSelect.value = closest.value;
+            this._updateCompressionSettings();
         });
 
         // Playback controls
@@ -138,7 +137,6 @@ class App {
         this.elements.stopBtn.addEventListener('click', () => this._stop());
         this.elements.fullscreenBtn.addEventListener('click', () => this._toggleFullscreen());
         this.elements.seekBar.addEventListener('input', (e) => this._seek(e.target.value));
-        this.elements.showComparison.addEventListener('change', (e) => this._toggleComparison(e.target.checked));
 
         // Video time update
         this.elements.originalVideo.addEventListener('timeupdate', () => this._updateTimeDisplay());
@@ -161,9 +159,11 @@ class App {
         this.elements.urlInput.style.display = source === 'url' ? 'flex' : 'none';
         this.elements.sampleVideos.style.display = source === 'sample' ? 'flex' : 'none';
 
-        // If webcam selected, load webcam immediately
+        // Load source immediately for webcam/screen
         if (source === 'webcam') {
             this._loadFromWebcam();
+        } else if (source === 'screen') {
+            this._loadFromScreen();
         }
     }
 
@@ -179,8 +179,7 @@ class App {
 
         try {
             this._showNotification('Loading video...', 'info');
-            const info = await this.processor.loadFromUrl(url);
-            this._onVideoLoaded(info);
+            await this._loadVideo(url);
         } catch (error) {
             this._showNotification(`Failed to load video: ${error.message}`, 'error');
         }
@@ -194,11 +193,39 @@ class App {
 
         try {
             this._showNotification('Loading sample video...', 'info');
-            const info = await this.processor.loadFromUrl(url);
-            this._onVideoLoaded(info);
+            await this._loadVideo(url);
         } catch (error) {
             this._showNotification(`Failed to load sample: ${error.message}`, 'error');
         }
+    }
+
+    /**
+     * Load video from URL
+     */
+    async _loadVideo(url) {
+        this._cleanup();
+
+        return new Promise((resolve, reject) => {
+            this.elements.originalVideo.src = url;
+            this.elements.originalVideo.crossOrigin = 'anonymous';
+
+            this.elements.originalVideo.onloadeddata = () => {
+                console.log('Video loaded:', url);
+                this._onVideoLoaded({
+                    width: this.elements.originalVideo.videoWidth,
+                    height: this.elements.originalVideo.videoHeight,
+                    duration: this.elements.originalVideo.duration,
+                    isLive: false
+                });
+                resolve();
+            };
+
+            this.elements.originalVideo.onerror = (e) => {
+                reject(new Error('Failed to load video'));
+            };
+
+            this.elements.originalVideo.load();
+        });
     }
 
     /**
@@ -206,14 +233,81 @@ class App {
      */
     async _loadFromWebcam() {
         try {
+            this._cleanup();
             this._showNotification('Accessing webcam...', 'info');
-            const info = await this.processor.loadFromWebcam();
-            this._onVideoLoaded(info);
 
-            // Auto-play webcam
-            await this.processor.play();
+            this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: 'user'
+                },
+                audio: false
+            });
+
+            this.elements.originalVideo.srcObject = this.mediaStream;
+
+            const track = this.mediaStream.getVideoTracks()[0];
+            const settings = track.getSettings();
+
+            this._onVideoLoaded({
+                width: settings.width,
+                height: settings.height,
+                duration: Infinity,
+                isLive: true
+            });
+
+            // Auto-play for live sources
+            await this.elements.originalVideo.play();
+            await this._startCompression();
+
         } catch (error) {
-            this._showNotification(error.message, 'error');
+            this._showNotification(error.message || 'Failed to access webcam', 'error');
+            // Revert to sample source
+            document.querySelector('input[name="source"][value="sample"]').checked = true;
+            this._onSourceChange('sample');
+        }
+    }
+
+    /**
+     * Load from screen capture
+     */
+    async _loadFromScreen() {
+        try {
+            this._cleanup();
+            this._showNotification('Starting screen capture...', 'info');
+
+            this.mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    cursor: 'always',
+                    displaySurface: 'monitor'
+                },
+                audio: false
+            });
+
+            this.elements.originalVideo.srcObject = this.mediaStream;
+
+            // Handle stream ended
+            this.mediaStream.getVideoTracks()[0].addEventListener('ended', () => {
+                this._onEnded();
+            });
+
+            const track = this.mediaStream.getVideoTracks()[0];
+            const settings = track.getSettings();
+
+            this._onVideoLoaded({
+                width: settings.width,
+                height: settings.height,
+                duration: Infinity,
+                isLive: true
+            });
+
+            // Auto-play for live sources
+            await this.elements.originalVideo.play();
+            await this._startCompression();
+
+        } catch (error) {
+            this._showNotification(error.message || 'Screen sharing was cancelled', 'error');
             // Revert to sample source
             document.querySelector('input[name="source"][value="sample"]').checked = true;
             this._onSourceChange('sample');
@@ -233,7 +327,6 @@ class App {
 
         // Update info displays
         this.elements.originalInfo.textContent = `${info.width}x${info.height}`;
-        this.elements.resolutionDisplay.textContent = `${info.width}x${info.height}`;
 
         if (isFinite(info.duration)) {
             this.elements.duration.textContent = this._formatTime(info.duration);
@@ -241,7 +334,10 @@ class App {
             this.elements.duration.textContent = 'LIVE';
         }
 
-        this._showNotification('Video loaded successfully!', 'success');
+        // Update target bitrate display
+        this.elements.statTargetBitrate.textContent = `${this.elements.bitrateSlider.value} kbps`;
+
+        this._showNotification('Video loaded! Click Play to start.', 'success');
     }
 
     /**
@@ -250,12 +346,64 @@ class App {
     _onVideoMetadata() {
         const video = this.elements.originalVideo;
         this.elements.originalInfo.textContent = `${video.videoWidth}x${video.videoHeight}`;
-        this.elements.resolutionDisplay.textContent = `${video.videoWidth}x${video.videoHeight}`;
 
         if (isFinite(video.duration)) {
             this.elements.duration.textContent = this._formatTime(video.duration);
             this.elements.seekBar.max = video.duration;
         }
+    }
+
+    /**
+     * Start compression loopback
+     */
+    async _startCompression() {
+        if (!this.elements.enableCompression.checked) {
+            return;
+        }
+
+        // Get the media stream from video element
+        let stream = this.mediaStream;
+
+        // If it's a file video, capture it from the video element
+        if (!stream && this.elements.originalVideo.src) {
+            // Create a canvas to capture the video
+            const canvas = document.createElement('canvas');
+            const video = this.elements.originalVideo;
+            canvas.width = video.videoWidth || 1280;
+            canvas.height = video.videoHeight || 720;
+            const ctx = canvas.getContext('2d');
+
+            // Create stream from canvas
+            this.canvasStream = canvas.captureStream(30);
+            stream = this.canvasStream;
+
+            // Start drawing video to canvas
+            const drawFrame = () => {
+                if (video.paused || video.ended) return;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                requestAnimationFrame(drawFrame);
+            };
+
+            // Start when video plays
+            if (!video.paused) {
+                drawFrame();
+            }
+            video.addEventListener('play', drawFrame);
+        }
+
+        if (!stream) {
+            console.warn('No stream available for compression');
+            return;
+        }
+
+        // Configure and start compression
+        this.compressionLoopback.updateConfig({
+            codec: this.elements.codecSelect.value,
+            bitrate: parseInt(this.elements.bitrateSlider.value),
+            framerate: 30
+        });
+
+        await this.compressionLoopback.start(stream);
     }
 
     /**
@@ -266,9 +414,10 @@ class App {
 
         try {
             if (this.elements.originalVideo.paused) {
-                await this.processor.play();
+                await this.elements.originalVideo.play();
+                await this._startCompression();
             } else {
-                this.processor.pause();
+                this.elements.originalVideo.pause();
             }
         } catch (error) {
             this._showNotification(error.message, 'error');
@@ -279,35 +428,40 @@ class App {
      * Stop playback
      */
     _stop() {
-        this.processor.stop();
+        this.elements.originalVideo.pause();
+        this.elements.originalVideo.currentTime = 0;
+        this.compressionLoopback.stop();
     }
 
     /**
      * Play event handler
      */
     _onPlay() {
-        this.elements.playPauseBtn.textContent = '⏸️ Pause';
+        this.elements.playPauseBtn.textContent = 'Pause';
     }
 
     /**
      * Pause event handler
      */
     _onPause() {
-        this.elements.playPauseBtn.textContent = '▶️ Play';
+        this.elements.playPauseBtn.textContent = 'Play';
     }
 
     /**
      * Video ended handler
      */
     _onEnded() {
-        this.elements.playPauseBtn.textContent = '▶️ Play';
+        this.elements.playPauseBtn.textContent = 'Play';
+        this.compressionLoopback.stop();
     }
 
     /**
      * Seek to position
      */
     _seek(value) {
-        this.processor.seek(parseFloat(value));
+        if (isFinite(this.elements.originalVideo.duration)) {
+            this.elements.originalVideo.currentTime = parseFloat(value);
+        }
     }
 
     /**
@@ -348,45 +502,60 @@ class App {
     }
 
     /**
-     * Toggle comparison view
+     * Update compression settings
      */
-    _toggleComparison(enabled) {
-        document.querySelector('.main-content').classList.toggle('split-view', enabled);
-    }
+    async _updateCompressionSettings() {
+        const enabled = this.elements.enableCompression.checked;
+        const codec = this.elements.codecSelect.value;
+        const bitrate = parseInt(this.elements.bitrateSlider.value);
 
-    /**
-     * Update enhancement settings
-     */
-    _updateEnhancementSettings() {
-        const enabled = this.elements.enableEnhancement.checked;
+        // Update display
+        this.elements.statTargetBitrate.textContent = `${bitrate} kbps`;
 
-        const settings = {
-            mode: enabled ? this.elements.enhancementMode.value : 'passthrough',
-            intensity: this.elements.intensity.value / 100,
-            brightness: this.elements.brightness.value / 100,
-            contrast: this.elements.contrast.value / 100,
-            saturation: this.elements.saturation.value / 100
-        };
+        // Update compressed panel visibility
+        document.querySelector('.compressed-panel').style.opacity = enabled ? '1' : '0.5';
 
-        this.enhancer.updateSettings(settings);
+        if (!enabled) {
+            this.compressionLoopback.stop();
+            this.elements.compressedVideo.srcObject = null;
+            return;
+        }
 
-        // Update enhanced info display
-        const mode = enabled ? this.elements.enhancementMode.options[this.elements.enhancementMode.selectedIndex].text : 'Off';
-        const video = this.elements.originalVideo;
-
-        if (settings.mode === 'superres') {
-            this.elements.enhancedInfo.textContent = `${video.videoWidth * 2}x${video.videoHeight * 2} (${mode})`;
-        } else {
-            this.elements.enhancedInfo.textContent = `${video.videoWidth}x${video.videoHeight} (${mode})`;
+        // Restart compression with new settings if video is playing
+        if (!this.elements.originalVideo.paused) {
+            await this.compressionLoopback.stop();
+            this.compressionLoopback.updateConfig({ codec, bitrate });
+            await this._startCompression();
         }
     }
 
     /**
-     * Update performance stats display
+     * Update compression stats display
      */
-    _updateStats(stats) {
-        this.elements.fpsDisplay.textContent = `${stats.fps} fps`;
-        this.elements.frameTimeDisplay.textContent = `${stats.frameTime} ms`;
+    _updateCompressionStats(stats) {
+        this.elements.statCodec.textContent = stats.codecName || this.elements.codecSelect.value;
+        this.elements.statActualBitrate.textContent = `${stats.actualBitrate} kbps`;
+        this.elements.statResolution.textContent = stats.frameWidth > 0 ? `${stats.frameWidth}x${stats.frameHeight}` : '-';
+        this.elements.statFps.textContent = stats.framesPerSecond > 0 ? `${Math.round(stats.framesPerSecond)}` : '-';
+        this.elements.statPacketsLost.textContent = stats.packetsLost.toString();
+        this.elements.statBytesSent.textContent = this._formatBytes(stats.bytesSent);
+        this.elements.statFramesDropped.textContent = stats.framesDropped.toString();
+
+        // Update compressed info
+        if (stats.frameWidth > 0) {
+            this.elements.compressedInfo.textContent = `${stats.frameWidth}x${stats.frameHeight} @ ${stats.actualBitrate}kbps`;
+        }
+    }
+
+    /**
+     * Format bytes to human readable
+     */
+    _formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
     /**
@@ -408,23 +577,11 @@ class App {
                 break;
             case 'ArrowLeft':
                 e.preventDefault();
-                this.processor.seek(this.elements.originalVideo.currentTime - 5);
+                this._seek(this.elements.originalVideo.currentTime - 5);
                 break;
             case 'ArrowRight':
                 e.preventDefault();
-                this.processor.seek(this.elements.originalVideo.currentTime + 5);
-                break;
-            case 'ArrowUp':
-                e.preventDefault();
-                this.elements.intensity.value = Math.min(100, parseInt(this.elements.intensity.value) + 10);
-                this.elements.intensityValue.textContent = this.elements.intensity.value;
-                this._updateEnhancementSettings();
-                break;
-            case 'ArrowDown':
-                e.preventDefault();
-                this.elements.intensity.value = Math.max(0, parseInt(this.elements.intensity.value) - 10);
-                this.elements.intensityValue.textContent = this.elements.intensity.value;
-                this._updateEnhancementSettings();
+                this._seek(this.elements.originalVideo.currentTime + 5);
                 break;
         }
     }
@@ -451,9 +608,32 @@ class App {
     /**
      * Cleanup resources
      */
+    _cleanup() {
+        this.compressionLoopback.stop();
+
+        // Stop media stream tracks
+        if (this.mediaStream) {
+            this.mediaStream.getTracks().forEach(track => track.stop());
+            this.mediaStream = null;
+        }
+
+        if (this.canvasStream) {
+            this.canvasStream.getTracks().forEach(track => track.stop());
+            this.canvasStream = null;
+        }
+
+        // Clear video sources
+        this.elements.originalVideo.srcObject = null;
+        this.elements.originalVideo.src = '';
+        this.elements.compressedVideo.srcObject = null;
+    }
+
+    /**
+     * Dispose all resources
+     */
     dispose() {
-        this.processor.dispose();
-        this.enhancer.dispose();
+        this._cleanup();
+        this.compressionLoopback.dispose();
     }
 }
 

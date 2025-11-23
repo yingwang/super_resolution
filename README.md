@@ -1,8 +1,18 @@
-# WebRTC Video Enhancement POC
+# Video Compression Comparison
 
-A proof-of-concept web application that demonstrates real-time video streaming with local super-resolution and video enhancement using WebRTC, TensorFlow.js, and WebGL shaders.
+A web application that demonstrates real video compression using WebRTC encoding/decoding. Compare original uncompressed video with compressed video side-by-side to see the effects of different codecs and bitrates.
 
 ## Features
+
+- **Real Video Compression**
+  - Uses WebRTC's actual video codecs (VP8, VP9, H.264)
+  - Video goes through real encoding/decoding pipeline
+  - Same compression used in video calls and streaming
+
+- **Side-by-Side Comparison**
+  - Original (uncompressed) video on the left
+  - Compressed video on the right
+  - See compression artifacts in real-time
 
 - **Multiple Video Sources**
   - Sample videos from Google's public video bucket
@@ -10,24 +20,16 @@ A proof-of-concept web application that demonstrates real-time video streaming w
   - Webcam capture via WebRTC getUserMedia
   - Screen capture via getDisplayMedia
 
-- **Real-time Video Enhancement**
-  - **Sharpen** - Unsharp mask filtering for edge enhancement
-  - **Super Resolution (2x)** - Bicubic upscaling with detail enhancement using TensorFlow.js
-  - **Denoise** - Bilateral filter approximation for noise reduction
-  - **Auto Enhance** - Automatic brightness/contrast/saturation adjustment
-  - **HDR Effect** - Local tone mapping for improved dynamic range
+- **Configurable Compression**
+  - **Codec Selection**: VP8, VP9, H.264
+  - **Bitrate Control**: 100 kbps to 8000 kbps
+  - Fine-tune slider for precise bitrate adjustment
 
-- **Adjustable Parameters**
-  - Enhancement intensity (0-100%)
-  - Brightness (-100 to +100)
-  - Contrast (-100 to +100)
-  - Saturation (-100 to +100)
-
-- **Performance Optimized**
-  - WebGL shaders for GPU-accelerated processing
-  - TensorFlow.js with WebGL backend
-  - Real-time FPS and frame time monitoring
-  - Fallback to Canvas 2D if WebGL unavailable
+- **Real-time Statistics**
+  - Actual bitrate vs target bitrate
+  - Resolution and FPS
+  - Packets lost and frames dropped
+  - Data sent tracking
 
 ## Quick Start
 
@@ -60,17 +62,24 @@ Simply open `index.html` in Chrome (some features like webcam access require HTT
 ## Usage
 
 1. **Select Video Source**
-   - Choose from sample videos, enter a custom URL, or use your webcam
+   - Choose from sample videos, enter a custom URL, or use webcam/screen share
 
-2. **Configure Enhancement**
-   - Enable/disable enhancement
-   - Select enhancement mode (Sharpen, Super Resolution, Denoise, etc.)
-   - Adjust intensity and color parameters
+2. **Configure Compression**
+   - Select codec (VP8, VP9, H.264)
+   - Set bitrate (lower = more compression artifacts)
+   - Use presets or fine-tune with slider
 
-3. **Playback Controls**
-   - Play/Pause, Stop, Fullscreen
-   - Seek bar for video files
-   - Split view for side-by-side comparison
+3. **Compare Quality**
+   - Click Play to start both videos
+   - Watch the side-by-side comparison
+   - Lower bitrates show more visible compression artifacts
+
+### Tips for Seeing Compression Artifacts
+
+- **100-250 kbps**: Very obvious blocking, blur, and color banding
+- **500 kbps**: Noticeable artifacts during motion
+- **1000+ kbps**: Subtle artifacts, good quality for most content
+- **4000+ kbps**: Near-transparent quality
 
 ### Keyboard Shortcuts
 
@@ -79,78 +88,90 @@ Simply open `index.html` in Chrome (some features like webcam access require HTT
 | Space / K | Play/Pause |
 | F | Toggle Fullscreen |
 | ← / → | Seek -5s / +5s |
-| ↑ / ↓ | Increase/Decrease intensity |
 
 ## Architecture
 
 ```
 super_resolution/
-├── index.html           # Main HTML page
-├── styles.css           # Application styles
+├── index.html              # Main HTML page
+├── styles.css              # Application styles
 ├── js/
-│   ├── app.js           # Main application logic
-│   ├── enhancer.js      # Video enhancement (WebGL shaders + TensorFlow.js)
-│   └── video-processor.js # Video streaming (WebRTC, MediaStream)
+│   ├── app.js              # Main application logic
+│   ├── compression-loopback.js  # WebRTC compression loopback
+│   ├── enhancer.js         # Video enhancement (optional)
+│   └── video-processor.js  # Video streaming utilities
 ├── package.json
 └── README.md
 ```
 
 ### Key Components
 
-- **VideoEnhancer** (`js/enhancer.js`)
-  - WebGL shader-based image processing
-  - TensorFlow.js integration for ML operations
-  - Multiple enhancement modes with configurable parameters
-
-- **VideoProcessor** (`js/video-processor.js`)
-  - WebRTC MediaStream handling
-  - Video source management (URL, webcam, screen)
-  - Frame processing loop with performance monitoring
+- **CompressionLoopback** (`js/compression-loopback.js`)
+  - Creates WebRTC peer connections for local loopback
+  - Actual video encoding using browser's codecs
+  - Statistics collection from WebRTC stats API
+  - Configurable codec and bitrate
 
 - **App** (`js/app.js`)
   - UI event handling
   - Component orchestration
   - Playback controls
 
+## How It Works
+
+The application creates a local WebRTC loopback:
+
+1. **Source video** → **RTCPeerConnection (Sender)** → Encode with VP8/VP9/H264
+2. Encoded video → **RTCPeerConnection (Receiver)** → Decode
+3. Decoded video → **Display side-by-side with original**
+
+This is the same encoding/decoding process used in:
+- Video conferencing (Zoom, Meet, Teams)
+- WebRTC streaming
+- Real-time video applications
+
 ## Technical Details
 
-### WebRTC Integration
+### WebRTC Compression Pipeline
 
-The app uses the following WebRTC/Media APIs:
-- `getUserMedia()` - Webcam access
-- `getDisplayMedia()` - Screen capture
-- `RTCPeerConnection` - Peer-to-peer streaming capability (ready for extension)
+1. Video source captured as MediaStream
+2. MediaStream added to sender RTCPeerConnection
+3. Encoding parameters set (bitrate, codec preference)
+4. SDP modified to prefer specific codec
+5. Encoded frames sent to receiver via local ICE
+6. Receiver decodes and outputs to video element
 
-### Enhancement Pipeline
+### Supported Codecs
 
-1. Video frame captured from source
-2. Frame uploaded to WebGL texture
-3. Enhancement shader applied (GPU accelerated)
-4. Result rendered to output canvas
-5. Performance stats updated
+| Codec | Notes |
+|-------|-------|
+| VP8 | Widely supported, good compression |
+| VP9 | Better quality at lower bitrates |
+| H.264 | Hardware acceleration common |
+| AV1 | Best quality (if browser supports) |
 
-### Super Resolution Approach
+### Bitrate Impact
 
-For real-time performance, the super resolution mode uses:
-1. High-quality bicubic interpolation (2x upscale)
-2. Laplacian sharpening via TensorFlow.js convolution
-3. Adaptive intensity blending
-
-Note: True deep learning super resolution models (ESRGAN, etc.) are too computationally expensive for real-time video. This implementation prioritizes smooth playback.
+Lower bitrates mean:
+- Smaller data size
+- More compression artifacts
+- Blockiness, especially in motion
+- Color banding in gradients
+- Loss of fine detail
 
 ## Browser Compatibility
 
-- **Chrome 90+** (recommended) - Full WebGL2 and WebRTC support
+- **Chrome 90+** (recommended) - Full VP8/VP9/H264 support
 - **Firefox 88+** - Full support
-- **Safari 15+** - Limited WebGL support, may fall back to Canvas 2D
+- **Safari 15+** - H.264 support, limited VP9
 - **Edge 90+** - Full support
 
 ## Limitations
 
 - Cross-origin videos must have appropriate CORS headers
 - Webcam access requires HTTPS or localhost
-- Super resolution is optimized for visual quality, not true detail reconstruction
-- Performance depends on GPU capabilities
+- Actual compression quality depends on browser's encoder implementation
+- Local loopback has no network latency/jitter simulation
 
 ## License
 
