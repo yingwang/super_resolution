@@ -55,12 +55,25 @@ class App {
             statActualBitrate: document.getElementById('statActualBitrate'),
             statResolution: document.getElementById('statResolution'),
             statEnhancement: document.getElementById('statEnhancement'),
-            statFps: document.getElementById('statFps')
+            statFps: document.getElementById('statFps'),
+
+            // Segmentation controls
+            enableSegmentation: document.getElementById('enableSegmentation'),
+            backgroundType: document.getElementById('backgroundType'),
+            blurAmount: document.getElementById('blurAmount'),
+            blurAmountValue: document.getElementById('blurAmountValue'),
+            blurAmountGroup: document.getElementById('blurAmountGroup'),
+            bgColor: document.getElementById('bgColor'),
+            bgColorGroup: document.getElementById('bgColorGroup'),
+            bgImageUrl: document.getElementById('bgImageUrl'),
+            bgImageGroup: document.getElementById('bgImageGroup'),
+            loadBgImage: document.getElementById('loadBgImage')
         };
 
         // Modules
         this.compressionLoopback = new CompressionLoopback();
         this.enhancer = new VideoEnhancer();
+        this.segmentation = new BackgroundSegmentation();
 
         // State
         this.currentSource = 'sample';
@@ -160,6 +173,16 @@ class App {
                 this._updateEnhancementSettings();
             });
         });
+
+        // Segmentation controls
+        this.elements.enableSegmentation.addEventListener('change', () => this._updateSegmentationSettings());
+        this.elements.backgroundType.addEventListener('change', () => this._updateSegmentationSettings());
+        this.elements.blurAmount.addEventListener('input', (e) => {
+            this.elements.blurAmountValue.textContent = e.target.value;
+            this._updateSegmentationSettings();
+        });
+        this.elements.bgColor.addEventListener('input', () => this._updateSegmentationSettings());
+        this.elements.loadBgImage.addEventListener('click', () => this._loadBackgroundImage());
 
         // Playback controls
         this.elements.playPauseBtn.addEventListener('click', () => this._togglePlayPause());
@@ -441,6 +464,10 @@ class App {
         this.stats.lastTime = performance.now();
         this.stats.frameCount = 0;
 
+        // Create temp canvas for segmentation output
+        const segCanvas = document.createElement('canvas');
+        const segCtx = segCanvas.getContext('2d');
+
         const processFrame = async () => {
             if (!this.isProcessing) return;
 
@@ -452,8 +479,24 @@ class App {
                     const outputWidth = receivedVideo.videoWidth;
                     const outputHeight = receivedVideo.videoHeight;
 
-                    // Process frame through enhancer (using received/compressed video as source)
-                    await this.enhancer.processFrame(receivedVideo, outputWidth, outputHeight);
+                    // Resize segmentation canvas if needed
+                    if (segCanvas.width !== outputWidth || segCanvas.height !== outputHeight) {
+                        segCanvas.width = outputWidth;
+                        segCanvas.height = outputHeight;
+                    }
+
+                    let sourceForEnhancer = receivedVideo;
+
+                    // Apply background segmentation if enabled
+                    if (this.segmentation.isEnabled && this.segmentation.isReady()) {
+                        const segmented = await this.segmentation.processFrame(receivedVideo, segCanvas);
+                        if (segmented) {
+                            sourceForEnhancer = segCanvas;
+                        }
+                    }
+
+                    // Process frame through enhancer
+                    await this.enhancer.processFrame(sourceForEnhancer, outputWidth, outputHeight);
 
                     // Update FPS stats
                     this.stats.frameCount++;
@@ -628,6 +671,59 @@ class App {
     }
 
     /**
+     * Update segmentation settings
+     */
+    async _updateSegmentationSettings() {
+        const enabled = this.elements.enableSegmentation.checked;
+        const backgroundType = this.elements.backgroundType.value;
+
+        // Show/hide relevant controls
+        this.elements.blurAmountGroup.style.display = backgroundType === 'blur' ? 'flex' : 'none';
+        this.elements.bgColorGroup.style.display = (backgroundType === 'color' || backgroundType === 'image') ? 'flex' : 'none';
+        this.elements.bgImageGroup.style.display = backgroundType === 'image' ? 'block' : 'none';
+
+        // Initialize segmentation model if enabling
+        if (enabled && !this.segmentation.isReady()) {
+            this._showNotification('Loading BodyPix model...', 'info');
+            try {
+                await this.segmentation.init();
+                this._showNotification('Background segmentation ready!', 'success');
+            } catch (error) {
+                this._showNotification('Failed to load segmentation model', 'error');
+                this.elements.enableSegmentation.checked = false;
+                return;
+            }
+        }
+
+        // Update segmentation settings
+        this.segmentation.setEnabled(enabled);
+        this.segmentation.updateSettings({
+            backgroundType,
+            blurAmount: parseInt(this.elements.blurAmount.value),
+            backgroundColor: this.elements.bgColor.value
+        });
+    }
+
+    /**
+     * Load background image for virtual background
+     */
+    async _loadBackgroundImage() {
+        const url = this.elements.bgImageUrl.value.trim();
+        if (!url) {
+            this._showNotification('Please enter an image URL', 'error');
+            return;
+        }
+
+        try {
+            this._showNotification('Loading background image...', 'info');
+            await this.segmentation.setBackgroundImage(url);
+            this._showNotification('Background image loaded!', 'success');
+        } catch (error) {
+            this._showNotification('Failed to load background image', 'error');
+        }
+    }
+
+    /**
      * Update compression stats display
      */
     _updateCompressionStats(stats) {
@@ -704,6 +800,9 @@ class App {
         this.elements.originalVideo.srcObject = null;
         this.elements.originalVideo.src = '';
         this.elements.receivedVideo.srcObject = null;
+
+        // Reset button state
+        this.elements.playPauseBtn.textContent = 'Play';
     }
 
     /**
