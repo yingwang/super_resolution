@@ -1,140 +1,156 @@
-# Video Call Enhancement POC
+# WebRTC Video Enhancement POC
 
-A proof-of-concept web application demonstrating **receiver-side video enhancement** for WebRTC video calls. The app enhances incoming video streams in real-time using TensorFlow.js and WebGL shaders.
-
-## Use Case
-
-In video calling applications, the video quality received can be degraded due to:
-- Network bandwidth limitations
-- Compression artifacts
-- Low-light conditions on the sender's side
-- Low resolution cameras
-
-This POC demonstrates how the **receiver** can enhance the incoming video locally to improve visual quality without requiring any changes on the sender's side.
+A proof-of-concept web application that demonstrates real-time video streaming with local super-resolution and video enhancement using WebRTC, TensorFlow.js, and WebGL shaders.
 
 ## Features
 
-- **Real-time Enhancement** - Process incoming video frames at 30+ FPS
-- **Multiple Enhancement Modes**:
-  - **Auto Enhance** - Automatic brightness/contrast optimization
-  - **Sharpen** - Edge enhancement for clearer details
-  - **Denoise** - Reduces compression artifacts and noise
-  - **Super Resolution** - 2x upscaling with detail enhancement
-  - **HDR Effect** - Improved dynamic range
+- **Multiple Video Sources**
+  - Sample videos from Google's public video bucket
+  - Custom URL input (MP4, WebM)
+  - Webcam capture via WebRTC getUserMedia
+  - Screen capture via getDisplayMedia
+
+- **Real-time Video Enhancement**
+  - **Sharpen** - Unsharp mask filtering for edge enhancement
+  - **Super Resolution (2x)** - Bicubic upscaling with detail enhancement using TensorFlow.js
+  - **Denoise** - Bilateral filter approximation for noise reduction
+  - **Auto Enhance** - Automatic brightness/contrast/saturation adjustment
+  - **HDR Effect** - Local tone mapping for improved dynamic range
 
 - **Adjustable Parameters**
-  - Enhancement intensity
-  - Brightness adjustment
-  - Contrast adjustment
+  - Enhancement intensity (0-100%)
+  - Brightness (-100 to +100)
+  - Contrast (-100 to +100)
+  - Saturation (-100 to +100)
 
-- **Simulation Options** (for testing)
-  - Webcam or sample video sources
-  - Quality degradation simulation (720p → 240p)
-  - Side-by-side comparison view
+- **Performance Optimized**
+  - WebGL shaders for GPU-accelerated processing
+  - TensorFlow.js with WebGL backend
+  - Real-time FPS and frame time monitoring
+  - Fallback to Canvas 2D if WebGL unavailable
 
 ## Quick Start
 
+### Option 1: Using a static file server
+
 ```bash
-# No npm required! Just use Python's built-in server:
-python3 -m http.server 3000
+# Install dependencies
+npm install
+
+# Start the development server
+npm start
 ```
 
 Then open http://localhost:3000 in Chrome.
 
-## How It Works
+### Option 2: Using Python's built-in server
 
-### Architecture
+```bash
+# Python 3
+python -m http.server 3000
 
-```
-┌─────────────────┐     WebRTC      ┌─────────────────┐
-│     Sender      │ ──────────────► │    Receiver     │
-│  (Low quality)  │   Compressed    │                 │
-└─────────────────┘     Stream      │  ┌───────────┐  │
-                                    │  │ Enhancer  │  │
-                                    │  │ (WebGL +  │  │
-                                    │  │  TF.js)   │  │
-                                    │  └─────┬─────┘  │
-                                    │        ▼        │
-                                    │  Enhanced Video │
-                                    └─────────────────┘
+# Python 2
+python -m SimpleHTTPServer 3000
 ```
 
-### Processing Pipeline
+### Option 3: Open directly in browser
 
-1. **Receive Frame** - Video frame from WebRTC stream
-2. **Upload to GPU** - Frame data sent to WebGL texture
-3. **Apply Enhancement** - GPU shader processes the frame
-4. **Display** - Enhanced frame rendered to canvas
+Simply open `index.html` in Chrome (some features like webcam access require HTTPS or localhost).
 
-### Enhancement Techniques
+## Usage
 
-| Mode | Technique | Use Case |
-|------|-----------|----------|
-| Sharpen | Unsharp mask convolution | Blurry video |
-| Denoise | Bilateral filter | Compression artifacts |
-| Super Resolution | Bicubic + Laplacian sharpening | Low resolution |
-| HDR | Local tone mapping | Poor lighting |
-| Auto | Adaptive brightness/contrast | General improvement |
+1. **Select Video Source**
+   - Choose from sample videos, enter a custom URL, or use your webcam
 
-## Project Structure
+2. **Configure Enhancement**
+   - Enable/disable enhancement
+   - Select enhancement mode (Sharpen, Super Resolution, Denoise, etc.)
+   - Adjust intensity and color parameters
+
+3. **Playback Controls**
+   - Play/Pause, Stop, Fullscreen
+   - Seek bar for video files
+   - Split view for side-by-side comparison
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Space / K | Play/Pause |
+| F | Toggle Fullscreen |
+| ← / → | Seek -5s / +5s |
+| ↑ / ↓ | Increase/Decrease intensity |
+
+## Architecture
 
 ```
 super_resolution/
-├── index.html          # Video call UI
-├── styles.css          # Styling
+├── index.html           # Main HTML page
+├── styles.css           # Application styles
 ├── js/
-│   ├── enhancer.js     # WebGL shaders + TensorFlow.js
-│   └── video-call.js   # Call simulation & enhancement logic
+│   ├── app.js           # Main application logic
+│   ├── enhancer.js      # Video enhancement (WebGL shaders + TensorFlow.js)
+│   └── video-processor.js # Video streaming (WebRTC, MediaStream)
 ├── package.json
 └── README.md
 ```
 
-## Usage
+### Key Components
 
-1. **Start a Call**
-   - Select video source (webcam or sample video)
-   - Choose simulated quality level
-   - Click "Start Call"
+- **VideoEnhancer** (`js/enhancer.js`)
+  - WebGL shader-based image processing
+  - TensorFlow.js integration for ML operations
+  - Multiple enhancement modes with configurable parameters
 
-2. **Adjust Enhancement**
-   - Toggle enhancement on/off
-   - Select enhancement mode
-   - Adjust intensity sliders
+- **VideoProcessor** (`js/video-processor.js`)
+  - WebRTC MediaStream handling
+  - Video source management (URL, webcam, screen)
+  - Frame processing loop with performance monitoring
 
-3. **Compare Results**
-   - Click "Compare" to see original vs enhanced side-by-side
+- **App** (`js/app.js`)
+  - UI event handling
+  - Component orchestration
+  - Playback controls
 
-## Browser Support
+## Technical Details
 
-- **Chrome 90+** (recommended)
-- **Firefox 88+**
-- **Edge 90+**
-- Safari 15+ (limited WebGL support)
+### WebRTC Integration
 
-## Performance
+The app uses the following WebRTC/Media APIs:
+- `getUserMedia()` - Webcam access
+- `getDisplayMedia()` - Screen capture
+- `RTCPeerConnection` - Peer-to-peer streaming capability (ready for extension)
 
-| Resolution | Mode | Expected FPS |
-|------------|------|--------------|
-| 720p | Sharpen | 60 fps |
-| 720p | Super-res | 30 fps |
-| 480p | Any | 60 fps |
-| 1080p | Sharpen | 45 fps |
+### Enhancement Pipeline
 
-*Performance varies based on GPU capabilities*
+1. Video frame captured from source
+2. Frame uploaded to WebGL texture
+3. Enhancement shader applied (GPU accelerated)
+4. Result rendered to output canvas
+5. Performance stats updated
+
+### Super Resolution Approach
+
+For real-time performance, the super resolution mode uses:
+1. High-quality bicubic interpolation (2x upscale)
+2. Laplacian sharpening via TensorFlow.js convolution
+3. Adaptive intensity blending
+
+Note: True deep learning super resolution models (ESRGAN, etc.) are too computationally expensive for real-time video. This implementation prioritizes smooth playback.
+
+## Browser Compatibility
+
+- **Chrome 90+** (recommended) - Full WebGL2 and WebRTC support
+- **Firefox 88+** - Full support
+- **Safari 15+** - Limited WebGL support, may fall back to Canvas 2D
+- **Edge 90+** - Full support
 
 ## Limitations
 
-- **Not true AI super-resolution**: Real-time constraints prevent using deep learning models like ESRGAN. The super-resolution mode uses enhanced bicubic interpolation.
-- **Single-page POC**: This simulates a video call locally. Real WebRTC peer connections would require a signaling server.
-- **CORS restrictions**: Sample videos must have appropriate headers.
-
-## Future Improvements
-
-- [ ] Integrate actual WebRTC peer connection
-- [ ] Add WebCodecs API for more efficient video processing
-- [ ] Implement face-aware enhancement
-- [ ] Add bandwidth-adaptive quality modes
-- [ ] WebGPU support for newer browsers
+- Cross-origin videos must have appropriate CORS headers
+- Webcam access requires HTTPS or localhost
+- Super resolution is optimized for visual quality, not true detail reconstruction
+- Performance depends on GPU capabilities
 
 ## License
 
