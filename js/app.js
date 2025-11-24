@@ -686,7 +686,9 @@ class App {
             try {
                 await this.espcn.init();
                 const info = this.espcn.getModelInfo();
-                this._showNotification(`ESPCN ready! (${info.params} params)`, 'success');
+                const weightType = info.pretrained ? '✓ Trained weights' : '⚠ Crafted weights';
+                this._showNotification(`ESPCN ready! ${weightType} (${info.params} params)`, 'success');
+                console.log('ESPCN Model Info:', info);
             } catch (error) {
                 this._showNotification('Failed to load ESPCN model', 'error');
                 this.elements.enhancementMode.value = 'sharpen';

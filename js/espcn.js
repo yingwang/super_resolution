@@ -75,7 +75,15 @@ class ESPCNSuperResolution {
             if (loadedModel.inputs[0].shape.length === 4) {
                 this.model = loadedModel;
                 this.usePretrainedWeights = true;
-                console.log('Pre-trained ESPCN model loaded successfully!');
+
+                // Log detailed info
+                const params = this.model.countParams();
+                const layers = this.model.layers.length;
+                console.log('✓ Pre-trained ESPCN model loaded successfully!');
+                console.log(`  - Layers: ${layers}`);
+                console.log(`  - Parameters: ${params.toLocaleString()}`);
+                console.log(`  - Input shape: [batch, height, width, 3]`);
+                console.log(`  - Output scale: ${this.scale}x`);
 
                 // Warm up
                 const dummyInput = tf.zeros([1, 64, 64, 3]);
@@ -86,7 +94,7 @@ class ESPCNSuperResolution {
                 return true;
             }
         } catch (error) {
-            console.log('Pre-trained model not available:', error.message);
+            console.log('⚠ Pre-trained model not available:', error.message);
         }
 
         return false;
