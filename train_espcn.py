@@ -231,7 +231,7 @@ def export_to_tfjs(model):
 
     # Save Keras model first
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    keras_path = MODEL_DIR / "espcn_keras"
+    keras_path = MODEL_DIR / "espcn_keras.keras"
     model.save(keras_path)
     print(f"Saved Keras model to {keras_path}")
 
