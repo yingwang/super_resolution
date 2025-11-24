@@ -12,7 +12,9 @@ Usage:
 
 This will:
 1. Download training images (BSD300 dataset)
-2. Train the ESPCN model
+2. Train the ESPCN model with augmentations:
+   - Sharpen ground truth images (helps model learn sharper outputs)
+   - Add noise to input images (helps model learn to denoise)
 3. Export to TensorFlow.js format in ./espcn_tfjs/
 """
 
@@ -76,16 +78,69 @@ def random_crop(image, crop_size):
     return tf.image.random_crop(image, [crop_size, crop_size, 3])
 
 
+def sharpen_image(image, strength=1.0):
+    """
+    Apply sharpening to the image using unsharp mask.
+    This makes the ground truth sharper, helping the model learn sharper outputs.
+    """
+    # Sharpening kernel (Laplacian-based)
+    kernel = tf.constant([
+        [0, -1, 0],
+        [-1, 5, -1],
+        [0, -1, 0]
+    ], dtype=tf.float32)
+    kernel = tf.reshape(kernel, [3, 3, 1, 1])
+
+    # Expand kernel for 3 channels
+    kernel = tf.tile(kernel, [1, 1, 3, 1])
+
+    # Add batch dimension
+    img = tf.expand_dims(image, 0)
+
+    # Apply convolution for each channel separately
+    channels = []
+    for i in range(3):
+        channel = img[:, :, :, i:i+1]
+        k = kernel[:, :, i:i+1, :]
+        sharpened = tf.nn.conv2d(channel, k, strides=1, padding='SAME')
+        channels.append(sharpened)
+
+    sharpened = tf.concat(channels, axis=-1)
+    sharpened = tf.squeeze(sharpened, 0)
+
+    # Blend with original based on strength
+    result = image * (1 - strength) + sharpened * strength
+    return tf.clip_by_value(result, 0, 1)
+
+
+def add_noise(image, noise_stddev=0.02):
+    """
+    Add Gaussian noise to the image.
+    This helps the model learn to denoise while super-resolving.
+    """
+    noise = tf.random.normal(shape=tf.shape(image), mean=0.0, stddev=noise_stddev)
+    noisy = image + noise
+    return tf.clip_by_value(noisy, 0, 1)
+
+
 def create_lr_hr_pair(hr_image, scale):
-    """Create low-resolution/high-resolution image pair."""
+    """Create low-resolution/high-resolution image pair with augmentation."""
     lr_size = CROP_SIZE // scale
 
     # Randomly crop HR patch
     hr_patch = random_crop(hr_image, CROP_SIZE)
 
+    # Sharpen the HR patch (ground truth) to help model learn sharper outputs
+    hr_patch = sharpen_image(hr_patch, strength=0.3)
+
     # Create LR patch by downsampling
     lr_patch = tf.image.resize(hr_patch, [lr_size, lr_size], method='bicubic')
+
+    # Add noise to LR patch to help model learn to denoise
+    lr_patch = add_noise(lr_patch, noise_stddev=0.02)
+
     lr_patch = tf.clip_by_value(lr_patch, 0, 1)
+    hr_patch = tf.clip_by_value(hr_patch, 0, 1)
 
     return lr_patch, hr_patch
 
