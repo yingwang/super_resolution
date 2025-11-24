@@ -154,8 +154,8 @@ def add_motion_blur(image, max_kernel_size=7):
     blurred = tf.concat(channels, axis=-1)
     blurred = tf.squeeze(blurred, 0)
 
-    # Randomly apply motion blur (50% chance)
-    apply_blur = tf.random.uniform([]) > 0.5
+    # Randomly apply motion blur (30% chance - reduced for less aggressive augmentation)
+    apply_blur = tf.random.uniform([]) > 0.7
     result = tf.cond(apply_blur, lambda: blurred, lambda: image)
 
     return tf.clip_by_value(result, 0, 1)
@@ -168,17 +168,17 @@ def create_lr_hr_pair(hr_image, scale):
     # Randomly crop HR patch
     hr_patch = random_crop(hr_image, CROP_SIZE)
 
-    # Sharpen the HR patch (ground truth) MORE to help model learn sharper outputs
-    hr_patch = sharpen_image(hr_patch, strength=0.6)
+    # Sharpen the HR patch (ground truth) to help model learn sharper outputs
+    hr_patch = sharpen_image(hr_patch, strength=0.5)
 
     # Create LR patch by downsampling
     lr_patch = tf.image.resize(hr_patch, [lr_size, lr_size], method='bicubic')
 
-    # Add motion blur to LR patch to simulate camera/subject motion
-    lr_patch = add_motion_blur(lr_patch, max_kernel_size=7)
+    # Add motion blur to LR patch to simulate camera/subject motion (30% chance)
+    lr_patch = add_motion_blur(lr_patch, max_kernel_size=5)
 
-    # Add noise to LR patch to help model learn to denoise
-    lr_patch = add_noise(lr_patch, noise_stddev=0.025)
+    # Add light noise to LR patch (reduced from 0.025 to 0.01)
+    lr_patch = add_noise(lr_patch, noise_stddev=0.01)
 
     lr_patch = tf.clip_by_value(lr_patch, 0, 1)
     hr_patch = tf.clip_by_value(hr_patch, 0, 1)

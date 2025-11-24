@@ -804,60 +804,73 @@ class App {
      * @returns {number} PSNR in dB
      */
     _calculatePSNR(source1, source2) {
-        const width = source1.videoWidth || source1.width;
-        const height = source1.videoHeight || source1.height;
+        try {
+            const width = source1.videoWidth || source1.width;
+            const height = source1.videoHeight || source1.height;
 
-        if (!width || !height) return 0;
+            if (!width || !height || width < 1 || height < 1) {
+                console.warn('Invalid dimensions for PSNR calculation');
+                return 0;
+            }
 
-        // Create temporary canvases if needed
-        if (!this.psnrCanvas1) {
-            this.psnrCanvas1 = document.createElement('canvas');
-            this.psnrCanvas2 = document.createElement('canvas');
+            // Check if videos are playing
+            if (source1.readyState < 2 || (source2.readyState && source2.readyState < 2)) {
+                return 0;
+            }
+
+            // Create temporary canvases if needed
+            if (!this.psnrCanvas1) {
+                this.psnrCanvas1 = document.createElement('canvas');
+                this.psnrCanvas2 = document.createElement('canvas');
+            }
+
+            this.psnrCanvas1.width = width;
+            this.psnrCanvas1.height = height;
+            this.psnrCanvas2.width = width;
+            this.psnrCanvas2.height = height;
+
+            const ctx1 = this.psnrCanvas1.getContext('2d', { willReadFrequently: true });
+            const ctx2 = this.psnrCanvas2.getContext('2d', { willReadFrequently: true });
+
+            // Draw both sources
+            ctx1.drawImage(source1, 0, 0, width, height);
+            ctx2.drawImage(source2, 0, 0, width, height);
+
+            // Get image data
+            const data1 = ctx1.getImageData(0, 0, width, height).data;
+            const data2 = ctx2.getImageData(0, 0, width, height).data;
+
+            // Calculate MSE (Mean Squared Error)
+            let mse = 0;
+            const pixelCount = width * height;
+
+            for (let i = 0; i < data1.length; i += 4) {
+                // Calculate MSE for RGB channels (skip alpha)
+                const r1 = data1[i];
+                const g1 = data1[i + 1];
+                const b1 = data1[i + 2];
+                const r2 = data2[i];
+                const g2 = data2[i + 1];
+                const b2 = data2[i + 2];
+
+                mse += Math.pow(r1 - r2, 2);
+                mse += Math.pow(g1 - g2, 2);
+                mse += Math.pow(b1 - b2, 2);
+            }
+
+            mse /= (pixelCount * 3); // Average over all RGB pixels
+
+            // Calculate PSNR
+            if (mse < 0.0001) return 100; // Essentially identical images
+
+            const maxPixel = 255;
+            const psnr = 10 * Math.log10((maxPixel * maxPixel) / mse);
+
+            return psnr;
+        } catch (error) {
+            console.error('PSNR calculation error:', error);
+            return 0;
         }
-
-        this.psnrCanvas1.width = width;
-        this.psnrCanvas1.height = height;
-        this.psnrCanvas2.width = width;
-        this.psnrCanvas2.height = height;
-
-        const ctx1 = this.psnrCanvas1.getContext('2d', { willReadFrequently: true });
-        const ctx2 = this.psnrCanvas2.getContext('2d', { willReadFrequently: true });
-
-        // Draw both sources
-        ctx1.drawImage(source1, 0, 0, width, height);
-        ctx2.drawImage(source2, 0, 0, width, height);
-
-        // Get image data
-        const data1 = ctx1.getImageData(0, 0, width, height).data;
-        const data2 = ctx2.getImageData(0, 0, width, height).data;
-
-        // Calculate MSE (Mean Squared Error)
-        let mse = 0;
-        const pixelCount = width * height;
-
-        for (let i = 0; i < data1.length; i += 4) {
-            // Calculate MSE for RGB channels (skip alpha)
-            const r1 = data1[i];
-            const g1 = data1[i + 1];
-            const b1 = data1[i + 2];
-            const r2 = data2[i];
-            const g2 = data2[i + 1];
-            const b2 = data2[i + 2];
-
-            mse += Math.pow(r1 - r2, 2);
-            mse += Math.pow(g1 - g2, 2);
-            mse += Math.pow(b1 - b2, 2);
-        }
-
-        mse /= (pixelCount * 3); // Average over all RGB pixels
-
-        // Calculate PSNR
-        if (mse === 0) return 100; // Identical images
-
-        const maxPixel = 255;
-        const psnr = 10 * Math.log10((maxPixel * maxPixel) / mse);
-
-        return psnr;
     }
 
     /**
