@@ -123,6 +123,44 @@ def add_noise(image, noise_stddev=0.02):
     return tf.clip_by_value(noisy, 0, 1)
 
 
+def add_motion_blur(image, max_kernel_size=7):
+    """
+    Add motion blur to simulate camera/subject motion.
+    This helps the model learn to handle real-world video blur.
+    """
+    # Randomly choose blur direction and strength
+    angle = tf.random.uniform([], 0, 180)
+    kernel_size = tf.random.uniform([], 3, max_kernel_size, dtype=tf.int32)
+
+    # Convert to radians
+    angle_rad = angle * 3.14159 / 180.0
+
+    # Create motion blur kernel
+    kernel = tf.zeros([kernel_size, kernel_size, 1, 1], dtype=tf.float32)
+    center = kernel_size // 2
+
+    # Simple horizontal motion blur kernel for now
+    # (TensorFlow graph mode makes it hard to do angle-dependent kernels)
+    kernel_1d = tf.ones([1, kernel_size, 1, 1], dtype=tf.float32) / tf.cast(kernel_size, tf.float32)
+
+    # Apply blur to each channel
+    img = tf.expand_dims(image, 0)
+    channels = []
+    for i in range(3):
+        channel = img[:, :, :, i:i+1]
+        blurred = tf.nn.conv2d(channel, kernel_1d, strides=1, padding='SAME')
+        channels.append(blurred)
+
+    blurred = tf.concat(channels, axis=-1)
+    blurred = tf.squeeze(blurred, 0)
+
+    # Randomly apply motion blur (50% chance)
+    apply_blur = tf.random.uniform([]) > 0.5
+    result = tf.cond(apply_blur, lambda: blurred, lambda: image)
+
+    return tf.clip_by_value(result, 0, 1)
+
+
 def create_lr_hr_pair(hr_image, scale):
     """Create low-resolution/high-resolution image pair with augmentation."""
     lr_size = CROP_SIZE // scale
@@ -130,14 +168,17 @@ def create_lr_hr_pair(hr_image, scale):
     # Randomly crop HR patch
     hr_patch = random_crop(hr_image, CROP_SIZE)
 
-    # Sharpen the HR patch (ground truth) to help model learn sharper outputs
-    hr_patch = sharpen_image(hr_patch, strength=0.3)
+    # Sharpen the HR patch (ground truth) MORE to help model learn sharper outputs
+    hr_patch = sharpen_image(hr_patch, strength=0.6)
 
     # Create LR patch by downsampling
     lr_patch = tf.image.resize(hr_patch, [lr_size, lr_size], method='bicubic')
 
+    # Add motion blur to LR patch to simulate camera/subject motion
+    lr_patch = add_motion_blur(lr_patch, max_kernel_size=7)
+
     # Add noise to LR patch to help model learn to denoise
-    lr_patch = add_noise(lr_patch, noise_stddev=0.02)
+    lr_patch = add_noise(lr_patch, noise_stddev=0.025)
 
     lr_patch = tf.clip_by_value(lr_patch, 0, 1)
     hr_patch = tf.clip_by_value(hr_patch, 0, 1)
