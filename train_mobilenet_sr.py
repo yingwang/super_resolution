@@ -177,26 +177,34 @@ def pixel_shuffle(scale):
 
 def build_mobilenet_sr_model(scale, channels=3):
     """
-    Build MobileNetV2-based SR model.
+    Build improved SR model with residual blocks.
 
-    Uses MobileNetV2 as feature extractor followed by upsampling layers.
-    Much more powerful than simple ESPCN.
+    Uses efficient residual blocks instead of full MobileNetV2
+    to avoid spatial dimension issues while maintaining quality.
     """
     inputs = keras.Input(shape=(None, None, channels))
 
-    # Use MobileNetV2 as feature extractor (pretrained on ImageNet)
-    # Remove top layers, use as feature extractor
-    mobilenet = keras.applications.MobileNetV2(
-        input_shape=(None, None, channels),
-        include_top=False,
-        weights=None,  # Start from scratch for SR task
-        alpha=0.5  # Width multiplier for smaller model
-    )
+    # Initial feature extraction
+    x = layers.Conv2D(64, 3, padding='same', activation='relu')(inputs)
 
-    # Extract features
-    x = mobilenet(inputs)
+    # Residual blocks for feature extraction
+    for i in range(4):
+        # Save residual
+        residual = x
 
-    # Additional refinement layers
+        # Depthwise separable convolution (MobileNet-style efficiency)
+        x = layers.SeparableConv2D(64, 3, padding='same', use_bias=False)(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.ReLU()(x)
+
+        x = layers.SeparableConv2D(64, 3, padding='same', use_bias=False)(x)
+        x = layers.BatchNormalization()(x)
+
+        # Residual connection
+        x = layers.Add()([x, residual])
+        x = layers.ReLU()(x)
+
+    # Additional feature refinement
     x = layers.Conv2D(64, 3, padding='same', activation='relu')(x)
     x = layers.Conv2D(32, 3, padding='same', activation='relu')(x)
 
