@@ -15,8 +15,12 @@ class ESPCNSuperResolution {
         this.scale = 2; // Upscale factor
         this.usePretrainedWeights = false; // Whether loaded from pre-trained model
 
-        // Path to pre-trained model (if available)
-        this.pretrainedModelPath = 'espcn_tfjs/model.json';
+        // Paths to pre-trained models (try MobileNet first, fallback to ESPCN)
+        this.modelPaths = [
+            'mobilenet_sr_tfjs/model.json',  // Try MobileNet first (better quality)
+            'espcn_tfjs/model.json'           // Fallback to ESPCN
+        ];
+        this.loadedModelPath = null;
 
         // Processing canvases
         this.inputCanvas = null;
@@ -62,41 +66,48 @@ class ESPCNSuperResolution {
 
     /**
      * Try to load pre-trained TF.js model
+     * Tries multiple model paths (MobileNet first, then ESPCN)
      * @returns {boolean} Whether loading succeeded
      */
     async _tryLoadPretrained() {
-        try {
-            console.log(`Attempting to load pre-trained model from ${this.pretrainedModelPath}...`);
+        for (const modelPath of this.modelPaths) {
+            try {
+                console.log(`Attempting to load model from ${modelPath}...`);
 
-            // Try to load the model
-            const loadedModel = await tf.loadLayersModel(this.pretrainedModelPath);
+                // Try to load the model
+                const loadedModel = await tf.loadLayersModel(modelPath);
 
-            // Verify model structure
-            if (loadedModel.inputs[0].shape.length === 4) {
-                this.model = loadedModel;
-                this.usePretrainedWeights = true;
+                // Verify model structure
+                if (loadedModel.inputs[0].shape.length === 4) {
+                    this.model = loadedModel;
+                    this.usePretrainedWeights = true;
+                    this.loadedModelPath = modelPath;
 
-                // Log detailed info
-                const params = this.model.countParams();
-                const layers = this.model.layers.length;
-                console.log('✓ Pre-trained ESPCN model loaded successfully!');
-                console.log(`  - Layers: ${layers}`);
-                console.log(`  - Parameters: ${params.toLocaleString()}`);
-                console.log(`  - Input shape: [batch, height, width, 3]`);
-                console.log(`  - Output scale: ${this.scale}x`);
+                    // Log detailed info
+                    const params = this.model.countParams();
+                    const layers = this.model.layers.length;
+                    const modelType = modelPath.includes('mobilenet') ? 'MobileNet-SR' : 'ESPCN';
+                    console.log(`✓ ${modelType} model loaded successfully!`);
+                    console.log(`  - Path: ${modelPath}`);
+                    console.log(`  - Layers: ${layers}`);
+                    console.log(`  - Parameters: ${params.toLocaleString()}`);
+                    console.log(`  - Input shape: [batch, height, width, 3]`);
+                    console.log(`  - Output scale: ${this.scale}x`);
 
-                // Warm up
-                const dummyInput = tf.zeros([1, 64, 64, 3]);
-                const dummyOutput = this.model.predict(dummyInput);
-                dummyOutput.dispose();
-                dummyInput.dispose();
+                    // Warm up
+                    const dummyInput = tf.zeros([1, 64, 64, 3]);
+                    const dummyOutput = this.model.predict(dummyInput);
+                    dummyOutput.dispose();
+                    dummyInput.dispose();
 
-                return true;
+                    return true;
+                }
+            } catch (error) {
+                console.log(`⚠ Model not found at ${modelPath}:`, error.message);
             }
-        } catch (error) {
-            console.log('⚠ Pre-trained model not available:', error.message);
         }
 
+        console.log('⚠ No pre-trained models found, using crafted weights');
         return false;
     }
 
@@ -483,12 +494,17 @@ class ESPCNSuperResolution {
     getModelInfo() {
         if (!this.model) return null;
 
+        const modelType = this.loadedModelPath && this.loadedModelPath.includes('mobilenet')
+            ? 'MobileNet-SR'
+            : 'ESPCN';
+
         return {
-            name: 'ESPCN',
+            name: modelType,
             scale: this.scale,
             layers: this.model.layers.length,
             params: this.model.countParams(),
-            pretrained: this.usePretrainedWeights
+            pretrained: this.usePretrainedWeights,
+            path: this.loadedModelPath || 'crafted weights'
         };
     }
 
